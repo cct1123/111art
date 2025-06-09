@@ -1,0 +1,391 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>The 111-Cut Diamond</title>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Cormorant+Garamond:wght@300;400&family=Playfair+Display:wght@400;700&display=swap" rel="stylesheet">
+    <style>
+        body {
+            /* Bright background */
+            background-color: #FBF9F6; 
+            color: #EAE0D5; /* Default text color (not used by title/subtitle) */
+            margin: 0;
+            padding: 0;
+            overflow: hidden;
+        }
+        #container {
+            width: 100vw;
+            height: 100vh;
+            cursor: grab;
+        }
+        .overlay {
+            position: absolute;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            display: flex;
+            flex-direction: column;
+            justify-content: center;
+            align-items: center;
+            text-align: center;
+            pointer-events: none;
+            opacity: 0;
+            transition: opacity 2s ease-in-out 3s; /* Fade in after formation */
+        }
+        .title {
+            font-family: 'Playfair Display', serif;
+            font-size: clamp(2.5rem, 8vw, 5rem);
+            font-weight: 700;
+            letter-spacing: 0.05em;
+            color: #D48C70; /* Terracotta color */
+            text-shadow: 0 0 15px rgba(212, 140, 112, 0.4);
+        }
+        .subtitle {
+            font-family: 'Cormorant Garamond', serif;
+            font-size: clamp(1rem, 4vw, 1.5rem);
+            font-weight: 400; /* Bolder for readability */
+            margin-top: 1rem;
+            color: #6A7059; /* Muted sage for better contrast and harmony */
+        }
+    </style>
+</head>
+<body>
+    <div id="container"></div>
+    <div id="overlay" class="overlay">
+        <h1 class="title">The 111-Cut Diamond</h1>
+        <p class="subtitle">Witness Perfection Unveiled</p>
+    </div>
+
+    <script>
+        let scene, camera, renderer, particles, diamond, wireframe;
+        let isMouseDown = false;
+        let mouseX = 0, mouseY = 0, targetRotationX = 0, targetRotationY = 0;
+        let windowHalfX = window.innerWidth / 2;
+        let windowHalfY = window.innerHeight / 2;
+        let animationProgress = 0;
+
+        init();
+        animate();
+
+        function init() {
+            // Scene
+            scene = new THREE.Scene();
+            // scene.fog = new THREE.FogExp2(0x8F9779, 0.15); 
+            scene.fog = new THREE.FogExp2(0x3C4B44, 0.10); 
+            
+
+            // Camera
+            camera = new THREE.PerspectiveCamera(75, window.innerWidth / window.innerHeight, 0.1, 1000);
+            camera.position.z = 15;
+
+            // Renderer
+            renderer = new THREE.WebGLRenderer({ antialias: true, alpha: true });
+            renderer.setSize(window.innerWidth, window.innerHeight);
+            renderer.setClearColor(0x000000, 0);
+            document.getElementById('container').appendChild(renderer.domElement);
+
+            // --- Lighting Setup ---
+            const ambientLight = new THREE.AmbientLight(0xEAE0D5, 0.5);
+            scene.add(ambientLight);
+
+            // const hemisphereLight = new THREE.HemisphereLight(0xFBF9F6, 0x6A7059, 0.9);
+            // scene.add(hemisphereLight);
+            const pointLight1 = new THREE.PointLight(0x3C4B44, 2, 50, 1);
+            pointLight1.position.set(-10, 10, 0.5);
+            scene.add(pointLight1);
+
+            const pointLight = new THREE.PointLight(0xD48C70, 2, 50, 1);
+            pointLight.position.set(10, 10, 5);
+            scene.add(pointLight);
+            // --- End of Lighting Setup ---
+
+
+            // Diamond Geometry
+            const diamondGeometry = createBrilliantCutGeometry(); 
+
+            // --- MODIFIED: Particle System for more vibrant colors ---
+            const particleMaterial = new THREE.PointsMaterial({
+                color: 0xFFD700, // Gold color for a vibrant base
+                size: 0.09, // Slightly larger for more impact
+                transparent: true,
+                opacity: 1.0, 
+                blending: THREE.AdditiveBlending,
+                depthWrite: false,
+                map: createStarTexture() // Using the new vibrant texture
+            });
+
+            const particleGeometry = new THREE.BufferGeometry();
+            const startPositions = [];
+            for (let i = 0; i < 5000; i++) {
+                startPositions.push((Math.random() - 0.5) * 30, (Math.random() - 0.5) * 30, (Math.random() - 0.5) * 30);
+            }
+            particleGeometry.setAttribute('position', new THREE.Float32BufferAttribute(startPositions, 3));
+            particles = new THREE.Points(particleGeometry, particleMaterial);
+            particles.rotateX(-1.0*Math.PI / 2);
+            scene.add(particles);
+            
+            // Final Diamond Mesh (initially invisible)
+            const diamondMaterial= new THREE.MeshPhysicalMaterial({
+                metalness: 0.05,
+                roughness: 0.015,
+                transmission: 0.9, 
+                ior: 2.417,
+                reflectivity: 0.9,
+                envMap: createCubemap(),
+                envMapIntensity: 1.5,
+                color: new THREE.Color(0xffffff),
+                transparent: true,
+                opacity: 0.0,
+            });
+
+            diamond = new THREE.Mesh(diamondGeometry, diamondMaterial);
+            diamond.rotateX(-1.0*Math.PI / 2);
+            scene.add(diamond);
+
+            // Create and add edges to the diamond
+            const edgeGeometry = new THREE.EdgesGeometry(diamond.geometry, 1);
+            const edgeMaterial = new THREE.LineBasicMaterial({
+                color: 0x3C4B44, // Dark Sage for edges
+                transparent: true,
+                opacity: 0, // Start invisible
+                linewidth: 1 
+            });
+            wireframe = new THREE.LineSegments(edgeGeometry, edgeMaterial);
+            diamond.add(wireframe);
+
+            // Event Listeners
+            const container = document.getElementById('container');
+            container.addEventListener('mousedown', onMouseDown, false);
+            container.addEventListener('mousemove', onMouseMove, false);
+            container.addEventListener('mouseup', onMouseUp, false);
+            container.addEventListener('touchstart', onMouseDown, false);
+            container.addEventListener('touchmove', onMouseMove, false);
+            container.addEventListener('touchend', onMouseUp, false);
+            window.addEventListener('resize', onWindowResize, false);
+            
+            document.getElementById('overlay').style.opacity = 1;
+        }
+        
+        function createBrilliantCutGeometry() {
+            const params = {
+                diameter: 10.0,
+                table_percent: 56.0,
+                crown_angle_deg: 34.8,
+                pavilion_angle_deg: 40.8,
+                star_length_percent: 55.0,
+                lower_half_percent: 78.0,
+                girdle_thickness_percent: 2.5,
+                culet_size_percent: 0.0,
+            };
+
+            const radius = params.diameter / 2.0;
+            const table_radius = radius * (params.table_percent / 100.0);
+            const culet_radius = radius * (params.culet_size_percent / 100.0);
+            const crown_angle_rad = THREE.MathUtils.degToRad(params.crown_angle_deg);
+            const pavilion_angle_rad = THREE.MathUtils.degToRad(params.pavilion_angle_deg);
+            const girdle_height = params.diameter * (params.girdle_thickness_percent / 100.0);
+
+            const z_girdle_top = girdle_height / 2.0;
+            const z_girdle_top_half = z_girdle_top * 2.0;
+            const z_girdle_bottom = -girdle_height / 2.0;
+            const z_girdle_bottom_half = z_girdle_bottom * 2.0;
+            const crown_height = (radius - table_radius) * Math.tan(crown_angle_rad);
+            const z_table = z_girdle_top + crown_height;
+            const pavilion_depth = radius * Math.tan(pavilion_angle_rad);
+            const z_culet_offset = 0.20;
+            const z_culet = z_girdle_bottom - pavilion_depth+z_culet_offset;
+
+            const vertices_map = {};
+            const main_angles = Array.from({ length: 8 }, (_, i) => THREE.MathUtils.degToRad(i * 45));
+            const half_angles = Array.from({ length: 8 }, (_, i) => THREE.MathUtils.degToRad(22.5 + i * 45));
+            // const main_angles_half = Array.from({ length: 4 }, (_, i) => THREE.MathUtils.degToRad(i * 45));
+            
+            vertices_map['girdle_top_main'] = main_angles.map(a => new THREE.Vector3(radius * Math.cos(a), radius * Math.sin(a), z_girdle_top));
+            vertices_map['girdle_top_half'] = half_angles.map(a => new THREE.Vector3(radius * Math.cos(a), radius * Math.sin(a), z_girdle_top_half));
+            vertices_map['girdle_bottom_main'] = main_angles.map(a => new THREE.Vector3(radius * Math.cos(a), radius * Math.sin(a), z_girdle_bottom));
+            vertices_map['girdle_bottom_half'] = half_angles.map(a => new THREE.Vector3(radius * Math.cos(a), radius * Math.sin(a), z_girdle_bottom_half));
+            vertices_map['table'] = half_angles.map(a => new THREE.Vector3(table_radius * Math.cos(a), table_radius * Math.sin(a), z_table));
+
+            const star_h_dist = (radius - table_radius) * (params.star_length_percent / 100.0);
+            const star_r = radius - star_h_dist;
+            const star_z = z_girdle_top + star_h_dist * Math.tan(crown_angle_rad);
+            vertices_map['star'] = main_angles.map(a => new THREE.Vector3(star_r * Math.cos(a), star_r * Math.sin(a), star_z));
+
+            const lh_h_dist = radius * (params.lower_half_percent / 100.0);
+            const lh_r = radius - lh_h_dist;
+            const lh_z = z_girdle_bottom - lh_h_dist * Math.tan(pavilion_angle_rad);
+            vertices_map['lower_half'] = main_angles.map(a => new THREE.Vector3(lh_r * Math.cos(a), lh_r * Math.sin(a), lh_z));
+
+            vertices_map['culet'] = (culet_radius < 1e-6)
+                ? [new THREE.Vector3(0, 0, z_culet)]
+                : main_angles.map(a => new THREE.Vector3(culet_radius * Math.cos(a), culet_radius * Math.sin(a), z_culet+culet_radius/Math.tan(pavilion_angle_rad)));
+
+            let table_geom = [], star_geom = [], bezel_geom = [], upper_girdle_geom = [];
+            let lower_girdle_geom = [], pavilion_main_geom = [], culet_geom = [], girdle_geom = [];
+
+            function addTriangleTo(geom, v1, v2, v3) {
+                geom.push(v1.x, v1.y, v1.z, v2.x, v2.y, v2.z, v3.x, v3.y, v3.z);
+            }
+
+            for (let i = 1; i < vertices_map.table.length - 1; i++) {
+                addTriangleTo(table_geom, vertices_map.table[0], vertices_map.table[i], vertices_map.table[i + 1]);
+            }
+            
+            for (let i = 0; i < 8; i++) {
+                const i_next = (i + 1) % 8; const i_prev = (i + 7) % 8;
+
+                addTriangleTo(star_geom, vertices_map.table[i_prev], vertices_map.star[i], vertices_map.table[i]);
+                addTriangleTo(bezel_geom, vertices_map.table[i], vertices_map.star[i], vertices_map.girdle_top_half[i]);
+                addTriangleTo(bezel_geom, vertices_map.table[i],  vertices_map.girdle_top_half[i], vertices_map.star[i_next] );
+                addTriangleTo(upper_girdle_geom, vertices_map.girdle_top_main[i], vertices_map.star[i], vertices_map.girdle_top_half[i_prev]);
+                addTriangleTo(upper_girdle_geom, vertices_map.girdle_top_main[i], vertices_map.girdle_top_half[i], vertices_map.star[i]);
+
+
+                addTriangleTo(girdle_geom, vertices_map.girdle_top_main[i], vertices_map.girdle_bottom_main[i], vertices_map.girdle_bottom_half[i]);
+                addTriangleTo(girdle_geom, vertices_map.girdle_top_main[i], vertices_map.girdle_bottom_half[i], vertices_map.girdle_top_half[i]);
+                addTriangleTo(girdle_geom, vertices_map.girdle_top_half[i], vertices_map.girdle_bottom_main[i_next], vertices_map.girdle_top_main[i_next]);
+                addTriangleTo(girdle_geom, vertices_map.girdle_top_half[i], vertices_map.girdle_bottom_half[i], vertices_map.girdle_bottom_main[i_next]);
+
+                // addTriangleTo(lower_girdle_geom, vertices_map.girdle_bottom_main[i], vertices_map.lower_half[i], vertices_map.girdle_bottom_half[i]);
+                if (i % 2 == 0) {
+                    addTriangleTo(lower_girdle_geom, vertices_map.lower_half[i], vertices_map.girdle_bottom_half[i], vertices_map.girdle_bottom_main[i]);
+                    addTriangleTo(lower_girdle_geom, vertices_map.lower_half[i], vertices_map.girdle_bottom_main[i_next], vertices_map.girdle_bottom_half[i]);
+                }
+                else{
+                    addTriangleTo(lower_girdle_geom, vertices_map.lower_half[i_next], vertices_map.girdle_bottom_half[i], vertices_map.girdle_bottom_main[i]);
+                    addTriangleTo(lower_girdle_geom, vertices_map.lower_half[i_next], vertices_map.girdle_bottom_main[i_next], vertices_map.girdle_bottom_half[i]);
+                }
+                // const culet_v = vertices_map.culet[Math.floor(i / 4)%8];
+                const culet_v = vertices_map.culet[0];
+                // const culet_v_next = vertices_map.culet[(Math.floor(i / 4)+1)%8];
+                // addTriangleTo(pavilion_main_geom, vertices_map.lower_half[i], vertices_map.lower_half[i_next], vertices_map.girdle_bottom_main[i_next]);
+                if (i % 2 == 0) {
+                    addTriangleTo(pavilion_main_geom, culet_v, vertices_map.lower_half[i], vertices_map.girdle_bottom_main[i_prev]);
+                }
+                else {
+                    addTriangleTo(pavilion_main_geom, culet_v, vertices_map.girdle_bottom_main[i], vertices_map.lower_half[i_prev]);
+                }
+                // addTriangleTo(pavilion_main_geom, culet_v, vertices_map.lower_half[i_next], vertices_map.girdle_bottom_main[i]);
+
+            }
+            
+            const final_vertices = [].concat(table_geom, star_geom, bezel_geom, upper_girdle_geom, girdle_geom, lower_girdle_geom, pavilion_main_geom, culet_geom);
+            const geometry = new THREE.BufferGeometry();
+            geometry.setAttribute('position', new THREE.Float32BufferAttribute(final_vertices, 3));
+            geometry.computeVertexNormals();
+            return geometry;
+        }   
+
+        // MODIFIED: createStarTexture now uses vibrant, magical colors
+        function createStarTexture() {
+            const canvas = document.createElement('canvas');
+            canvas.width = 64;
+            canvas.height = 64;
+            const context = canvas.getContext('2d');
+            const gradient = context.createRadialGradient(32, 32, 0, 32, 32, 32);
+            gradient.addColorStop(0.1, 'rgba(255, 255, 220, 1)');      // Bright, glowing center
+            gradient.addColorStop(0.4, 'rgba(255, 215, 0, 0.8)');      // Rich gold
+            gradient.addColorStop(0.8, 'rgba(190, 70, 160, 0.4)');     // Subtle magenta outer glow
+            gradient.addColorStop(1, 'rgba(190, 70, 160, 0)');         // Fading to transparent
+            context.fillStyle = gradient;
+            context.fillRect(0, 0, 64, 64);
+            return new THREE.CanvasTexture(canvas);
+        }
+
+        function createCubemap() {
+            const path = "https://threejs.org/examples/textures/cube/Park2/";
+            const format = '.jpg';
+            const urls = [
+                path + 'posx' + format, path + 'negx' + format,
+                path + 'posy' + format, path + 'negy' + format,
+                path + 'posz' + format, path + 'negz' + format
+            ];
+            const reflectionCube = new THREE.CubeTextureLoader().load(urls);
+            reflectionCube.format = THREE.RGBFormat;
+            return reflectionCube;
+        }
+
+        function onWindowResize() {
+            windowHalfX = window.innerWidth / 2;
+            windowHalfY = window.innerHeight / 2;
+            camera.aspect = window.innerWidth / window.innerHeight;
+            camera.updateProjectionMatrix();
+            renderer.setSize(window.innerWidth, window.innerHeight);
+        }
+        
+        function onMouseDown(event) { isMouseDown = true; container.style.cursor = 'grabbing'; }
+        function onMouseUp() { isMouseDown = false; container.style.cursor = 'grab'; }
+
+        function onMouseMove(event) {
+            const clientX = event.touches ? event.touches[0].clientX : event.clientX;
+            const clientY = event.touches ? event.touches[0].clientY : event.clientY;
+
+            if (isMouseDown) {
+                targetRotationY = (clientX - windowHalfX) * 0.005;
+                targetRotationX = (clientY - windowHalfY) * 0.005;
+            }
+        }
+
+        function animate() {
+            requestAnimationFrame(animate);
+            const diamondshowprogress = 0.3;
+            
+            if (animationProgress < 1) {
+                animationProgress += 0.002;
+                const progress = Math.pow(animationProgress, 3);
+                
+                const particlePositions = particles.geometry.attributes.position.array;
+                const diamondPositions = diamond.geometry.attributes.position.array;
+                
+                for (let i = 0; i < particlePositions.length; i += 3) {
+                    const iDiamond = (i / 3) % diamond.geometry.attributes.position.count * 3;
+                    
+                    particlePositions[i] += (diamondPositions[iDiamond] - particlePositions[i]) * progress;
+                    particlePositions[i+1] += (diamondPositions[iDiamond+1] - particlePositions[i+1]) * progress;
+                    particlePositions[i+2] += (diamondPositions[iDiamond+2] - particlePositions[i+2]) * progress;
+                }
+                particles.geometry.attributes.position.needsUpdate = true;
+
+                if (animationProgress > diamondshowprogress) {
+                    const fadeInProgress = (animationProgress - diamondshowprogress) / (1 - diamondshowprogress);
+                    diamond.material.opacity = fadeInProgress;
+                    if(wireframe) wireframe.material.opacity = fadeInProgress * 0.5;
+                }
+            } else {
+                diamond.material.opacity = 1;
+
+                if (particles.material.opacity > 0) {
+                    particles.material.opacity -= 0.02; 
+                    wireframe.material.opacity -= 0.01; 
+                } else {
+                    particles.visible = false; 
+                    wireframe.material.opacity = 0.05; 
+                }
+            }
+
+            if (diamond) {
+                if (isMouseDown) {
+                    diamond.rotation.y += targetRotationY - diamond.rotation.y;
+                    diamond.rotation.x += targetRotationX - diamond.rotation.x;
+                } else {
+                     diamond.rotation.y -= 0.0001;
+                     diamond.rotation.x += 0.0005;
+                     diamond.rotation.z += 0.003;
+                }
+            }
+            
+            particles.rotation.y -= 0.0001;
+            particles.rotation.x += 0.0005;
+            particles.rotation.z += 0.003;
+
+            renderer.render(scene, camera);
+        }
+    </script>
+</body>
+</html>
