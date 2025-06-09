@@ -1,0 +1,329 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>RF & Microwave Conversion Hub</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <script>
+      MathJax = {
+        tex: {
+          inlineMath: [['$', '$'], ['\\(', '\\)']],
+          displayMath: [['$$', '$$'], ['\\[', '\\]']]
+        },
+        svg: {
+          fontCache: 'global'
+        }
+      };
+    </script>
+    <script id="MathJax-script" async src="https://cdn.jsdelivr.net/npm/mathjax@3/es5/tex-mml-chtml.js"></script>
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Playfair+Display:wght@700&family=Poppins:wght@400;500&display=swap" rel="stylesheet">
+    
+    <style>
+        body {
+            font-family: 'Poppins', sans-serif;
+            background-color: #FBF9F6;
+            color: #3D405B;
+        }
+        .text-heading {
+            font-family: 'Playfair Display', serif;
+        }
+        .calc-card {
+            background-color: white;
+            border-radius: 0.75rem;
+            border: 1px solid #EAE2D8;
+            box-shadow: 0 4px 6px -1px rgba(0,0,0,0.03), 0 2px 4px -1px rgba(0,0,0,0.03);
+            transition: all 0.2s ease-in-out;
+        }
+        .calc-card:hover {
+            box-shadow: 0 10px 15px -3px rgba(0,0,0,0.05), 0 4px 6px -2px rgba(0,0,0,0.05);
+        }
+        .form-input {
+            background-color: #F8F5F1;
+            border-color: #EAE2D8;
+            color: #3D405B;
+            transition: all 0.2s ease-in-out;
+        }
+        .form-input:focus {
+             border-color: #E07A5F;
+             box-shadow: 0 0 0 2px rgba(224, 122, 95, 0.2);
+             outline: none;
+        }
+        .tab-button {
+            transition: all 0.2s ease-in-out;
+            border-bottom: 2px solid transparent;
+        }
+        .tab-button.active {
+            border-color: #E07A5F;
+            color: #E07A5F;
+        }
+        .tab-content { display: none; }
+        .tab-content.active { display: block; }
+        mjx-container { text-align: left !important; margin-top: 1rem; margin-bottom: 1rem; }
+    </style>
+</head>
+<body class="antialiased">
+
+    <div class="container mx-auto p-4 md:p-8 max-w-4xl">
+        <header class="text-center mb-10">
+            <h1 class="text-4xl md:text-5xl font-bold text-heading">RF Conversion Hub</h1>
+            <p class="mt-2 text-lg text-gray-500">A quick utility for common engineering conversions</p>
+        </header>
+
+        <main class="grid grid-cols-1 md:grid-cols-2 gap-8">
+            <div class="calc-card p-6">
+                <h2 class="text-2xl font-bold text-heading mb-4">Power</h2>
+                <div class="space-y-4">
+                    <div>
+                        <label for="dbm" class="block text-sm font-medium text-gray-700">Power (dBm)</label>
+                        <input type="number" id="dbm" placeholder="e.g., 30" class="w-full mt-1 p-2 form-input border rounded-lg focus:ring-0">
+                    </div>
+                    <div>
+                        <label for="mW" class="block text-sm font-medium text-gray-700">Power (mW)</label>
+                        <input type="number" id="mW" placeholder="e.g., 1000" class="w-full mt-1 p-2 form-input border rounded-lg focus:ring-0">
+                    </div>
+                    <div>
+                        <label for="W" class="block text-sm font-medium text-gray-700">Power (W)</label>
+                        <input type="number" id="W" placeholder="e.g., 1" class="w-full mt-1 p-2 form-input border rounded-lg focus:ring-0">
+                    </div>
+                </div>
+            </div>
+
+            <div class="calc-card p-6">
+                <h2 class="text-2xl font-bold text-heading mb-4">Gain & Loss</h2>
+                <div class="space-y-4">
+                    <div>
+                        <label for="db" class="block text-sm font-medium text-gray-700">Gain/Loss (dB)</label>
+                        <input type="number" id="db" placeholder="e.g., 3 or -3" class="w-full mt-1 p-2 form-input border rounded-lg focus:ring-0">
+                    </div>
+                    <div>
+                        <label for="linear" class="block text-sm font-medium text-gray-700">Linear Gain/Loss Factor</label>
+                        <input type="number" id="linear" readonly class="w-full mt-1 p-2 form-input border rounded-lg focus:ring-0 bg-gray-50 cursor-not-allowed">
+                    </div>
+                    <div>
+                        <label for="percent" class="block text-sm font-medium text-gray-700">Percentage Change (%)</label>
+                        <input type="text" id="percent" readonly class="w-full mt-1 p-2 form-input border rounded-lg focus:ring-0 bg-gray-50 cursor-not-allowed">
+                    </div>
+                </div>
+            </div>
+
+            <div class="calc-card p-6">
+                <h2 class="text-2xl font-bold text-heading mb-4">Reflection</h2>
+                 <div class="space-y-4">
+                    <div>
+                        <label for="vswr" class="block text-sm font-medium text-gray-700">VSWR</label>
+                        <input type="number" id="vswr" step="0.01" min="1" placeholder="e.g., 1.22" class="w-full mt-1 p-2 form-input border rounded-lg focus:ring-0">
+                    </div>
+                    <div>
+                        <label for="rl" class="block text-sm font-medium text-gray-700">Return Loss (dB)</label>
+                        <input type="number" id="rl" step="0.01" min="0" placeholder="e.g., 20" class="w-full mt-1 p-2 form-input border rounded-lg focus:ring-0">
+                    </div>
+                    <div>
+                        <label for="gamma" class="block text-sm font-medium text-gray-700">Reflection Coefficient |Γ|</label>
+                        <input type="number" id="gamma" step="0.01" min="0" max="1" placeholder="e.g., 0.1" class="w-full mt-1 p-2 form-input border rounded-lg focus:ring-0">
+                    </div>
+                </div>
+            </div>
+
+            <div class="calc-card p-6">
+                <h2 class="text-2xl font-bold text-heading mb-4">Transmission</h2>
+                 <div class="space-y-4">
+                    <div>
+                        <label for="il" class="block text-sm font-medium text-gray-700">Insertion Loss (dB)</label>
+                        <input type="number" id="il" min="0" placeholder="e.g., 0.5" class="w-full mt-1 p-2 form-input border rounded-lg focus:ring-0">
+                    </div>
+                    <div>
+                        <label for="tx-coeff" class="block text-sm font-medium text-gray-700">Transmission Factor |S21|</label>
+                        <input type="number" id="tx-coeff" readonly class="w-full mt-1 p-2 form-input border rounded-lg focus:ring-0 bg-gray-50 cursor-not-allowed">
+                    </div>
+                    <div>
+                        <label for="tx-percent" class="block text-sm font-medium text-gray-700">Power Transmitted (%)</label>
+                        <input type="number" id="tx-percent" readonly class="w-full mt-1 p-2 form-input border rounded-lg focus:ring-0 bg-gray-50 cursor-not-allowed">
+                    </div>
+                </div>
+            </div>
+        </main>
+        
+        <section class="mt-12 bg-white p-6 md:p-8 rounded-xl border border-gray-200 shadow-sm">
+            <h2 class="text-2xl font-bold text-heading mb-4 text-center">Formulas & Definitions</h2>
+             <div class="border-b border-gray-200">
+                <nav class="-mb-px flex flex-wrap space-x-6 justify-center" aria-label="Tabs">
+                    <button class="tab-button active font-medium py-3 px-1" data-tab="power">Power</button>
+                    <button class="tab-button font-medium py-3 px-1 text-gray-500 hover:text-gray-700" data-tab="gain">Gain/Loss</button>
+                    <button class="tab-button font-medium py-3 px-1 text-gray-500 hover:text-gray-700" data-tab="reflection">Reflection</button>
+                    <button class="tab-button font-medium py-3 px-1 text-gray-500 hover:text-gray-700" data-tab="transmission">Transmission</button>
+                </nav>
+            </div>
+            <div class="mt-6 min-h-[150px] text-gray-700">
+                <div id="power" class="tab-content active space-y-2">
+                    <p>Power in dBm is a logarithmic scale relative to 1 milliwatt (mW).</p>
+                    $$ P_{mW} = 10^{\frac{P_{dBm}}{10}} $$
+                    $$ P_{dBm} = 10 \cdot \log_{10}(P_{mW}) $$
+                </div>
+                <div id="gain" class="tab-content space-y-2">
+                    <p>Gain in decibels (dB) is a logarithmic ratio of output power to input power.</p>
+                    $$ \text{Gain}_{dB} = 10 \cdot \log_{10}\left(\frac{P_{out}}{P_{in}}\right) $$
+                    $$ \text{Linear Factor} = 10^{\frac{\text{Gain}_{dB}}{10}} $$
+                </div>
+                <div id="reflection" class="tab-content space-y-2">
+                    <p>VSWR, Return Loss (RL), and Reflection Coefficient (Γ) all describe the power reflected from a mismatch.</p>
+                    $$ |\Gamma| = \frac{\text{VSWR} - 1}{\text{VSWR} + 1} $$
+                    $$ \text{Return Loss (dB)} = -20 \cdot \log_{10}(|\Gamma|) $$
+                </div>
+                <div id="transmission" class="tab-content space-y-2">
+                     <p>Insertion Loss (IL) measures the power lost through a device. The transmission factor (|S21|) is the linear magnitude of the transmitted voltage.</p>
+                     $$ |S21| = 10^{\frac{-\text{IL}_{dB}}{20}} $$
+                     $$ \text{Power Transmitted (\%)} = |S21|^2 \times 100\% $$
+                </div>
+            </div>
+        </section>
+    </div>
+
+<script>
+    document.addEventListener('DOMContentLoaded', () => {
+        // --- Element References ---
+        const dbm_in = document.getElementById('dbm');
+        const mW_in = document.getElementById('mW');
+        const W_in = document.getElementById('W');
+        
+        const db_in = document.getElementById('db');
+        const linear_out = document.getElementById('linear');
+        const percent_out = document.getElementById('percent');
+
+        const vswr_in = document.getElementById('vswr');
+        const rl_in = document.getElementById('rl');
+        const gamma_in = document.getElementById('gamma');
+        
+        const il_in = document.getElementById('il');
+        const tx_coeff_out = document.getElementById('tx-coeff');
+        const tx_percent_out = document.getElementById('tx-percent');
+
+        let isUpdating = false; // Flag to prevent calculation loops
+
+        // --- Helper to format numbers ---
+        const formatNum = (num) => {
+            if (Math.abs(num) < 1e-9) return 0;
+            if (Math.abs(num) > 1e6 || (Math.abs(num) < 1e-3 && num !== 0)) {
+                return num.toExponential(4);
+            }
+            return parseFloat(num.toFixed(4));
+        };
+        
+        // --- Power Conversion ---
+        const updatePower = (source) => {
+            if (isUpdating) return;
+            isUpdating = true;
+
+            const dbm = parseFloat(dbm_in.value);
+            const mw = parseFloat(mW_in.value);
+            const w = parseFloat(W_in.value);
+            
+            if (source === 'dbm' && !isNaN(dbm)) {
+                const new_mW = 10**(dbm / 10);
+                mW_in.value = formatNum(new_mW);
+                W_in.value = formatNum(new_mW / 1000);
+            } else if (source === 'mW' && !isNaN(mw)) {
+                dbm_in.value = formatNum(10 * Math.log10(mw));
+                W_in.value = formatNum(mw / 1000);
+            } else if (source === 'W' && !isNaN(w)) {
+                const new_mW = w * 1000;
+                dbm_in.value = formatNum(10 * Math.log10(new_mW));
+                mW_in.value = formatNum(new_mW);
+            }
+            isUpdating = false;
+        };
+
+        // --- Gain/Loss Conversion ---
+        const updateGain = () => {
+            const db = parseFloat(db_in.value);
+            if (isNaN(db)) {
+                linear_out.value = '';
+                percent_out.value = '';
+                return;
+            }
+            const linear = 10**(db / 10);
+            const percent = (linear - 1) * 100;
+            linear_out.value = formatNum(linear);
+            
+            if (percent >= 0) {
+                percent_out.value = `+${formatNum(percent)}% (Gain)`;
+            } else {
+                percent_out.value = `${formatNum(percent)}% (Loss)`;
+            }
+        };
+
+        // --- Reflection Conversion ---
+        const updateReflection = (source) => {
+            if (isUpdating) return;
+            isUpdating = true;
+            
+            const vswr = parseFloat(vswr_in.value);
+            const rl = parseFloat(rl_in.value);
+            const gamma = parseFloat(gamma_in.value);
+
+            if (source === 'vswr' && !isNaN(vswr) && vswr >= 1) {
+                const new_gamma = (vswr - 1) / (vswr + 1);
+                gamma_in.value = formatNum(new_gamma);
+                rl_in.value = formatNum(-20 * Math.log10(new_gamma));
+            } else if (source === 'rl' && !isNaN(rl) && rl >= 0) {
+                const new_gamma = 10**(-rl / 20);
+                gamma_in.value = formatNum(new_gamma);
+                vswr_in.value = formatNum((1 + new_gamma) / (1 - new_gamma));
+            } else if (source === 'gamma' && !isNaN(gamma) && gamma >= 0 && gamma < 1) {
+                rl_in.value = formatNum(-20 * Math.log10(gamma));
+                vswr_in.value = formatNum((1 + gamma) / (1 - gamma));
+            }
+            isUpdating = false;
+        };
+        
+        // --- Transmission Conversion ---
+        const updateTransmission = () => {
+            const il = parseFloat(il_in.value);
+            if (isNaN(il) || il < 0) {
+                 tx_coeff_out.value = '';
+                 tx_percent_out.value = '';
+                return;
+            }
+            const s21 = 10**(-il / 20);
+            tx_coeff_out.value = formatNum(s21);
+            tx_percent_out.value = formatNum(s21**2 * 100);
+        };
+        
+        // --- Event Listeners ---
+        dbm_in.addEventListener('input', () => updatePower('dbm'));
+        mW_in.addEventListener('input', () => updatePower('mW'));
+        W_in.addEventListener('input', () => updatePower('W'));
+        
+        db_in.addEventListener('input', updateGain);
+        
+        vswr_in.addEventListener('input', () => updateReflection('vswr'));
+        rl_in.addEventListener('input', () => updateReflection('rl'));
+        gamma_in.addEventListener('input', () => updateReflection('gamma'));
+        
+        il_in.addEventListener('input', updateTransmission);
+
+        // --- Tab Switching Logic ---
+        const tabs = document.querySelectorAll('.tab-button');
+        const tabContents = document.querySelectorAll('.tab-content');
+
+        tabs.forEach(tab => {
+            tab.addEventListener('click', () => {
+                tabs.forEach(item => { 
+                    item.classList.remove('active');
+                    item.classList.add('text-gray-500', 'hover:text-gray-700');
+                });
+                tab.classList.add('active');
+                tab.classList.remove('text-gray-500', 'hover:text-gray-700');
+
+                tabContents.forEach(content => content.classList.remove('active'));
+                const target = document.getElementById(tab.dataset.tab);
+                target.classList.add('active');
+            });
+        });
+    });
+</script>
+
+</body>
+</html>

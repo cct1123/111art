@@ -1,0 +1,415 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Interactive Crystal Structure Visualizer</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <script type="importmap">
+        {
+            "imports": {
+                "three": "https://cdn.jsdelivr.net/npm/three@0.164.1/build/three.module.js",
+                "three/addons/": "https://cdn.jsdelivr.net/npm/three@0.164.1/examples/jsm/"
+            }
+        }
+    </script>
+    <!-- Chosen Palette: Sage & Terracotta -->
+    <!-- Application Structure Plan: The core dual-panel structure is maintained for its proven interactive efficiency. The left panel houses all user controls, while the right is a dedicated 3D canvas. This redesign focuses on elevating the aesthetic experience by applying the Sage & Terracotta color scheme universally, refining typography, and enhancing 3D material properties for a softer, more elegant visual output, turning the tool into a more artistic and engaging educational piece. -->
+    <!-- Visualization & Content Choices: The core 3D visualization (Goal: Explore 3D relationships) is aesthetically overhauled. Scene background, lighting, and object materials are updated to match the new palette. The HKL plane and its normal vector are recolored to a prominent yet harmonious terracotta. UI components are restyled to blend with the new theme, using softer shadows and more refined spacing to create a clean, elegant interface. The fundamental interactive logic remains unchanged, as it has proven effective. Library/Method: Three.js, TailwindCSS. -->
+    <!-- CONFIRMATION: NO SVG graphics used. NO Mermaid JS used. -->
+    <style>
+        @import url('https://fonts.googleapis.com/css2?family=Playfair+Display:wght@700&family=Poppins:wght@400;500&display=swap');
+        
+        body {
+            font-family: 'Poppins', sans-serif;
+            background-color: #FBF9F6;
+            color: #3D405B;
+        }
+        
+        .control-panel {
+            background-color: #FBF9F6/80;
+            border-right-color: #EAE2D8/50;
+        }
+        .control-panel::-webkit-scrollbar { width: 6px; }
+        .control-panel::-webkit-scrollbar-track { background: #FBF9F6; }
+        .control-panel::-webkit-scrollbar-thumb { background-color: #D6C3B3; border-radius: 10px; }
+        
+        .panel-header { border-bottom-color: #EAE2D8/80; }
+        .panel-section { background-color: #FFFFFF/50; border-color: #EAE2D8; }
+        .panel-footer { border-top-color: #EAE2D8/80; color: #8D8D8D; }
+        
+        .text-heading { font-family: 'Playfair Display', serif; color: #3D405B; }
+        .text-main { color: #3D405B; }
+        .text-secondary { color: #6D6A6A; }
+        
+        .select-input, .num-input {
+            background-color: #F8F5F1;
+            border-color: #EAE2D8;
+            color: #3D405B;
+            transition: all 0.2s ease-in-out;
+        }
+        .select-input:focus, .num-input:focus {
+             border-color: #E07A5F;
+             box-shadow: 0 0 0 2px rgba(224, 122, 95, 0.2);
+        }
+        
+        .tooltip-custom { background-color: #FFFFFF/80; border-color: #EAE2D8; color: #3D405B; }
+        .mobile-menu-btn { background-color: #FFFFFF/70; box-shadow: 0 4px 6px -1px rgba(0,0,0,0.05), 0 2px 4px -1px rgba(0,0,0,0.03); }
+        .loader-text { color: #8D8D8D; }
+        .loader-spinner { border-top-color: #E07A5F; border-color: #EAE2D8; }
+        
+        .toggle-label { position: relative; display: inline-block; width: 44px; height: 24px; }
+        .toggle-slider { position: absolute; cursor: pointer; top: 0; left: 0; right: 0; bottom: 0; transition: .4s; border-radius: 24px; background-color: #D6C3B3; }
+        .toggle-slider:before { position: absolute; content: ""; height: 18px; width: 18px; left: 3px; bottom: 3px; background-color: white; transition: .4s; border-radius: 50%; box-shadow: 0 1px 3px rgba(0,0,0,0.1); }
+        input:checked + .toggle-slider { background-color: #E07A5F; }
+        input:checked + .toggle-slider:before { transform: translateX(20px); }
+        
+        .axis-label { font-size: 14px; font-weight: bold; color: #3D405B; }
+    </style>
+</head>
+<body class="overflow-hidden">
+
+    <div class="relative w-full h-screen">
+        <!-- Control Panel -->
+        <aside id="controlPanel" class="control-panel w-96 backdrop-blur-md flex flex-col h-full overflow-y-auto absolute top-0 left-0 transition-transform duration-300 ease-in-out transform z-20">
+            <div class="p-6 panel-header">
+                <h1 class="text-3xl text-heading">Crystal Viewer</h1>
+                <p class="text-sm text-secondary mt-1">An Interactive 3D Lattice Visualizer</p>
+            </div>
+
+            <div class="p-6 space-y-6 flex-grow">
+                <!-- Section: Structure Selection -->
+                <section>
+                    <h2 class="text-xl font-semibold text-main mb-4 text-heading">Select Structure</h2>
+                    <div class="space-y-4">
+                        <div>
+                            <label for="structure-type-select" class="block text-sm font-medium text-secondary mb-1">Structure Type</label>
+                            <select id="structure-type-select" class="w-full p-3 select-input border rounded-lg focus:ring-0"></select>
+                        </div>
+                        <div>
+                            <label for="material-select" class="block text-sm font-medium text-secondary mb-1">Material</label>
+                            <select id="material-select" class="w-full p-3 select-input border rounded-lg focus:ring-0"></select>
+                        </div>
+                    </div>
+                </section>
+
+                <!-- Section: Display Options -->
+                <section>
+                    <h2 class="text-xl font-semibold text-main mb-4 text-heading">Display Options</h2>
+                    <div class="space-y-4 p-4 panel-section rounded-lg border">
+                         <div>
+                            <label for="supercell-select" class="block text-sm font-medium text-secondary mb-1">Crystal Size</label>
+                            <select id="supercell-select" class="w-full p-3 select-input border rounded-lg focus:ring-0">
+                                <option value="1">1x1x1 (Unit Cell)</option>
+                                <option value="2">2x2x2 Supercell</option>
+                                <option value="3">3x3x3 Supercell</option>
+                            </select>
+                        </div>
+                        <div class="space-y-3">
+                            <label class="flex items-center justify-between"><span class="font-medium text-secondary">Atoms</span><label class="toggle-label"><input type="checkbox" id="toggle-atoms" class="sr-only" checked><span class="toggle-slider"></span></label></label>
+                            <label class="flex items-center justify-between"><span class="font-medium text-secondary">Bonds</span><label class="toggle-label"><input type="checkbox" id="toggle-bonds" class="sr-only" checked><span class="toggle-slider"></span></label></label>
+                            <label class="flex items-center justify-between"><span class="font-medium text-secondary">Unit Cell Outline</span><label class="toggle-label"><input type="checkbox" id="toggle-cell" class="sr-only" checked><span class="toggle-slider"></span></label></label>
+                        </div>
+                    </div>
+                </section>
+
+                <!-- Section: Reciprocal Space -->
+                <section id="hkl-section">
+                    <h2 class="text-xl font-semibold text-main mb-4 text-heading">Reciprocal Space</h2>
+                    <div class="space-y-4 p-4 panel-section rounded-lg border">
+                        <p class="text-sm text-secondary">Visualize crystallographic planes by defining Miller Indices (hkl).</p>
+                        <div class="grid grid-cols-3 gap-2">
+                           <input type="number" id="hkl-h" value="1" class="w-full p-2 num-input border rounded-lg text-center focus:ring-0">
+                           <input type="number" id="hkl-k" value="1" class="w-full p-2 num-input border rounded-lg text-center focus:ring-0">
+                           <input type="number" id="hkl-l" value="1" class="w-full p-2 num-input border rounded-lg text-center focus:ring-0">
+                        </div>
+                         <label class="flex items-center justify-between"><span class="font-medium text-secondary">Show HKL Plane</span><label class="toggle-label"><input type="checkbox" id="toggle-hkl" class="sr-only"><span class="toggle-slider"></span></label></label>
+                    </div>
+                </section>
+                
+                 <!-- Section: Information -->
+                <section>
+                    <h2 class="text-xl font-semibold text-main mb-4 text-heading">Structure Information</h2>
+                    <div id="info-panel" class="p-4 panel-section rounded-lg space-y-2 border text-sm"></div>
+                </section>
+
+                <!-- Section: Atom Inspector -->
+                <section>
+                    <h2 class="text-xl font-semibold text-main mb-4 text-heading">Atom Inspector</h2>
+                    <div id="inspector-panel" class="p-4 panel-section rounded-lg min-h-[80px] border text-sm flex items-center justify-center">
+                        <span class="text-secondary">Click an atom to inspect</span>
+                    </div>
+                </section>
+            </div>
+
+            <footer class="p-6 text-center text-xs panel-footer">
+                <p>Designed with Sage & Terracotta Palette</p>
+            </footer>
+        </aside>
+        
+        <!-- 3D Viewer Main Area -->
+        <main id="main-content" class="flex-1 h-full transition-all duration-300 ease-in-out ml-96">
+            <div id="webgl-container" class="w-full h-full relative">
+                 <button id="menu-toggle" class="absolute top-4 left-4 z-10 p-2 mobile-menu-btn backdrop-blur-sm rounded-full">
+                     <svg id="menu-icon" class="w-6 h-6 text-main" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12"></path></svg>
+                </button>
+                <div id="loader-container" class="absolute inset-0 bg-[#FBF9F6] flex flex-col items-center justify-center z-10">
+                    <div class="loader loader-spinner"></div>
+                    <p class="mt-4 loader-text">Loading 3D Visualizer...</p>
+                </div>
+                <div id="tooltip" class="absolute hidden tooltip-custom text-xs px-2 py-1 rounded-md shadow-lg z-50 pointer-events-none backdrop-blur-sm border"></div>
+            </div>
+        </main>
+    </div>
+
+    <script type="module">
+        import * as THREE from 'three';
+        import { OrbitControls } from 'three/addons/controls/OrbitControls.js';
+        import { CSS2DRenderer, CSS2DObject } from 'three/addons/renderers/CSS2DRenderer.js';
+
+        const CPK_COLORS = { 'H':0xFFFFFF,'He':0xD9FFFF,'Li':0xCC80FF,'Be':0xC2FF00,'B':0xFFB5B5,'C':0x303030,'N':0x3050F8,'O':0xFF0D0D,'F':0x90E050,'Ne':0xB3E3F5,'Na':0xAB5CF2,'Mg':0x8AFF00,'Al':0xBFA6A6,'Si':0x8090A0,'P':0xFF8000,'S':0xFFFF30,'Cl':0x1FF01F,'Ar':0x80D1E3,'K':0x8F40D4,'Ca':0x3DFF00,'Ti':0xBFC2C7,'Cr':0x8A99C7,'Fe':0xE06633,'Ni':0x50D050,'Cu':0xC88033,'Zn':0x7D80B0,'Ga':0xC28F8F,'Ge':0x668F8F,'As':0xBD80E3,'Br':0xA62929,'Ag':0xC0C0C0,'I':0x940094,'Ba':0x00C900,'Au':0xFFD123,'W':0x2194D6,'DEFAULT':0xFF1493,'Po':0xAB5C00 };
+        const CRYSTAL_DATA = {
+            diamond: { name:'Diamond',materials:{ 'C':{name:'Diamond (C)',elements:['C'],lattice:{a:3.57},bondFactor:0.45},'Si':{name:'Silicon (Si)',elements:['Si'],lattice:{a:5.43},bondFactor:0.45},'Ge':{name:'Germanium (Ge)',elements:['Ge'],lattice:{a:5.66},bondFactor:0.45} },basis:[{element:0,pos:new THREE.Vector3(0,0,0)},{element:0,pos:new THREE.Vector3(0.25,0.25,0.25)}],latticePoints:[new THREE.Vector3(0,0,0),new THREE.Vector3(0.5,0.5,0),new THREE.Vector3(0.5,0,0.5),new THREE.Vector3(0,0.5,0.5)],info:{'Space Group':'Fd-3m (227)','Coordination':'4 (Tetrahedral)'}, isCubic: true },
+            zincblende: { name:'Zincblende',materials:{ 'ZnS':{name:'Zinc Sulfide (ZnS)',elements:['Zn','S'],lattice:{a:5.41},bondFactor:0.45},'GaAs':{name:'Gallium Arsenide (GaAs)',elements:['Ga','As'],lattice:{a:5.65},bondFactor:0.45},'SiC':{name:'Silicon Carbide (Moissanite)',elements:['Si','C'],lattice:{a:4.36},bondFactor:0.45} },basis:[{element:0,pos:new THREE.Vector3(0,0,0)},{element:1,pos:new THREE.Vector3(0.25,0.25,0.25)}],latticePoints:[new THREE.Vector3(0,0,0),new THREE.Vector3(0.5,0.5,0),new THREE.Vector3(0.5,0,0.5),new THREE.Vector3(0,0.5,0.5)],info:{'Space Group':'F-43m (216)','Structure Type':'AB'}, isCubic: true },
+            rocksalt: { name:'Rock Salt',materials:{ 'NaCl':{name:'Sodium Chloride (Table Salt)',elements:['Na','Cl'],lattice:{a:5.64},bondFactor:0.55},'MgO':{name:'Magnesium Oxide (MgO)',elements:['Mg','O'],lattice:{a:4.21},bondFactor:0.55} },basis:[{element:0,pos:new THREE.Vector3(0,0,0)},{element:1,pos:new THREE.Vector3(0.5,0.5,0.5)}],latticePoints:[new THREE.Vector3(0,0,0),new THREE.Vector3(0.5,0.5,0),new THREE.Vector3(0.5,0,0.5),new THREE.Vector3(0,0.5,0.5)],info:{'Space Group':'Fm-3m (225)','Coordination':'6:6 Octahedral'}, isCubic: true },
+            fcc: { name:'Face-Centered Cubic (FCC)',materials:{ 'Cu':{name:'Copper (Cu)',elements:['Cu'],lattice:{a:3.61},bondFactor:0.75},'Al':{name:'Aluminum (Al)',elements:['Al'],lattice:{a:4.05},bondFactor:0.75},'Au':{name:'Gold (Au)',elements:['Au'],lattice:{a:4.08},bondFactor:0.75} },basis:[{element:0,pos:new THREE.Vector3(0,0,0)}],latticePoints:[new THREE.Vector3(0,0,0),new THREE.Vector3(0.5,0.5,0),new THREE.Vector3(0.5,0,0.5),new THREE.Vector3(0,0.5,0.5)],info:{'Space Group':'Fm-3m (225)','Packing Efficiency':'74%'}, isCubic: true },
+            bcc: { name:'Body-Centered Cubic (BCC)',materials:{ 'Fe':{name:'Iron (alpha)',elements:['Fe'],lattice:{a:2.87},bondFactor:0.9},'Cr':{name:'Chromium (Cr)',elements:['Cr'],lattice:{a:2.88},bondFactor:0.9},'W':{name:'Tungsten (W)',elements:['W'],lattice:{a:3.16},bondFactor:0.9} },basis:[{element:0,pos:new THREE.Vector3(0,0,0)}],latticePoints:[new THREE.Vector3(0,0,0),new THREE.Vector3(0.5,0.5,0.5)],info:{'Space Group':'Im-3m (229)','Packing Efficiency':'68%'}, isCubic: true },
+            sc: { name:'Simple Cubic (SC)',materials:{ 'Po':{name:'Polonium (alpha)',elements:['Po'],lattice:{a:3.35},bondFactor:1.1} },basis:[{element:0,pos:new THREE.Vector3(0,0,0)}],latticePoints:[new THREE.Vector3(0,0,0)],info:{'Space Group':'Pm-3m (221)','Packing Efficiency':'52%'}, isCubic: true },
+            hcp: { name:'Hexagonal Close-Packed (HCP)',materials:{ 'Mg':{name:'Magnesium (Mg)',elements:['Mg'],lattice:{a:3.21,c:5.21},bondFactor:1.1},'Zn':{name:'Zinc (Zn)',elements:['Zn'],lattice:{a:2.66,c:4.95},bondFactor:1.1},'Ti':{name:'Titanium (Ti)',elements:['Ti'],lattice:{a:2.95,c:4.68},bondFactor:1.1} },basis:[{element:0,pos:new THREE.Vector3(0,0,0)},{element:0,pos:new THREE.Vector3(1/3,2/3,1/2)}],latticePoints:[new THREE.Vector3(0,0,0)],info:{'Space Group':'P63/mmc (194)','Packing Efficiency':'74%'}, isCubic: false }
+        };
+
+        class CrystalVisualizer {
+            constructor(container) { this.container = container; this.init(); this.animate(); }
+            init() {
+                this.scene = new THREE.Scene();
+                this.scene.background = new THREE.Color('#FBF9F6');
+                this.camera = new THREE.PerspectiveCamera(50, this.container.clientWidth/this.container.clientHeight, 0.1, 1000);
+                this.renderer = new THREE.WebGLRenderer({ antialias: true, alpha: true });
+                this.renderer.setPixelRatio(window.devicePixelRatio);
+                this.container.appendChild(this.renderer.domElement);
+                this.labelRenderer = new CSS2DRenderer();
+                this.labelRenderer.domElement.style.position = 'absolute'; this.labelRenderer.domElement.style.top = '0px'; this.labelRenderer.domElement.style.pointerEvents = 'none';
+                this.container.appendChild(this.labelRenderer.domElement);
+                this.controls = new OrbitControls(this.camera, this.renderer.domElement);
+                this.controls.enableDamping = true;
+                this.scene.add(new THREE.AmbientLight(0xffffff, 1.8));
+                this.dirLight = new THREE.DirectionalLight(0xffffff, 2.5);
+                this.dirLight.position.set(10, 15, 12);
+                this.scene.add(this.dirLight);
+                this.raycaster = new THREE.Raycaster(); this.mouse = new THREE.Vector2();
+                this.groups = { atoms:new THREE.Group(), bonds:new THREE.Group(), cells:new THREE.Group(), hkl:new THREE.Group(), axes:new THREE.Group()};
+                Object.values(this.groups).forEach(g => this.scene.add(g));
+                this.highlightMaterial = new THREE.MeshStandardMaterial({ color:0xE07A5F, emissive:0xE07A5F, roughness:0.2, metalness:0.3 });
+                this.bondMaterial = new THREE.MeshStandardMaterial({ color:0x8D9B87, roughness:0.8 });
+                this.hklPlaneMaterial = new THREE.MeshBasicMaterial({ color: 0xE07A5F, side: THREE.DoubleSide, transparent: true, opacity: 0.35, depthWrite: false });
+                this.arrowMaterial = new THREE.MeshBasicMaterial({ color: 0xE07A5F });
+                window.addEventListener('resize', () => this.onWindowResize());
+                this.renderer.domElement.addEventListener('mousemove', (e) => this.onMouseMove(e));
+                this.renderer.domElement.addEventListener('click', () => this.onMouseClick());
+                this.onWindowResize();
+                this.tooltip = document.getElementById('tooltip');
+            }
+            clearScene() { Object.values(this.groups).forEach(g => g.clear()); }
+            drawStructure(structureData, materialData, supercell) {
+                this.clearScene();
+                const { a, c } = materialData.lattice;
+                const isHexagonal = !structureData.isCubic;
+                const latticeVectors = isHexagonal ? [ new THREE.Vector3(a, 0, 0), new THREE.Vector3(a*Math.cos(2*Math.PI/3), a*Math.sin(2*Math.PI/3), 0), new THREE.Vector3(0, 0, c) ] : [ new THREE.Vector3(a,0,0), new THREE.Vector3(0,a,0), new THREE.Vector3(0,0,a) ];
+                const maxDim = supercell;
+                const allAtomPositions = [];
+                for (let i=-1; i<maxDim+1; i++) for (let j=-1; j<maxDim+1; j++) for (let k=-1; k<maxDim+1; k++) {
+                    structureData.latticePoints.forEach(lp => {
+                        structureData.basis.forEach(b => {
+                            const finalFracPos = new THREE.Vector3().addVectors(lp, b.pos).add(new THREE.Vector3(i,j,k));
+                            const cartesianPos = new THREE.Vector3().addScaledVector(latticeVectors[0],finalFracPos.x).addScaledVector(latticeVectors[1],finalFracPos.y).addScaledVector(latticeVectors[2],finalFracPos.z);
+                            allAtomPositions.push({ pos:cartesianPos, element:materialData.elements[b.element], frac:finalFracPos });
+                        });
+                    });
+                }
+                const visibleAtoms = allAtomPositions.filter(d => { const {x,y,z}=d.frac; return x>=-0.01&&x<maxDim+0.01&&y>=-0.01&&y<maxDim+0.01&&z>=-0.01&&z<maxDim+0.01; });
+                const atomRadius = a * 0.11;
+                visibleAtoms.forEach(d => {
+                    const color = CPK_COLORS[d.element] || CPK_COLORS['DEFAULT'];
+                    const atom = new THREE.Mesh(new THREE.SphereGeometry(atomRadius, 20, 20), new THREE.MeshStandardMaterial({color, roughness:0.4, metalness:0.3, envMapIntensity:0.5}));
+                    atom.position.copy(d.pos);
+                    atom.userData = { element:d.element, fractional:d.frac, cartesian:d.pos, baseMaterial:atom.material };
+                    this.groups.atoms.add(atom);
+                });
+                const bondMaxLength = a * materialData.bondFactor;
+                const bondRadius = atomRadius * 0.2;
+                for (let i=0; i<this.groups.atoms.children.length; i++) for (let j=i+1; j<this.groups.atoms.children.length; j++) {
+                    const atom1=this.groups.atoms.children[i]; const atom2=this.groups.atoms.children[j];
+                    const dist=atom1.position.distanceTo(atom2.position);
+                    if (dist > 0.1 && dist < bondMaxLength) {
+                        const bond = new THREE.Mesh(new THREE.CylinderGeometry(bondRadius,bondRadius,dist,8), this.bondMaterial);
+                        bond.position.copy(atom1.position).lerp(atom2.position, 0.5);
+                        bond.quaternion.setFromUnitVectors(new THREE.Vector3(0,1,0), new THREE.Vector3().subVectors(atom2.position,atom1.position).normalize());
+                        this.groups.bonds.add(bond);
+                    }
+                }
+                for (let i=0;i<maxDim;i++) for(let j=0;j<maxDim;j++) for(let k=0;k<maxDim;k++) {
+                    const offset = new THREE.Vector3().addScaledVector(latticeVectors[0],i).addScaledVector(latticeVectors[1],j).addScaledVector(latticeVectors[2],k);
+                    let geom = isHexagonal ? new THREE.CylinderGeometry(a,a,c,6).translate(0,c/2,0) : new THREE.BoxGeometry(a,a,a).translate(a/2,a/2,a/2);
+                    const line = new THREE.LineSegments(new THREE.EdgesGeometry(geom), new THREE.LineBasicMaterial({color:0xD6C3B3, linewidth:2}));
+                    line.position.copy(offset); this.groups.cells.add(line);
+                }
+                const center = isHexagonal ? new THREE.Vector3(a*maxDim/2,c*maxDim/2,0) : new THREE.Vector3(a*maxDim/2, a*maxDim/2, a*maxDim/2);
+                this.controls.target.copy(center);
+                this.camera.position.set(center.x+a*maxDim, center.y+a*maxDim*0.8, center.z+a*maxDim*1.5);
+                this.controls.update();
+                this.toggleAxes(maxDim === 1, a);
+                document.getElementById('loader-container').style.display = 'none';
+            }
+            toggleAxes(visible, size) {
+                this.groups.axes.clear();
+                if(visible) {
+                    const axesHelper = new THREE.AxesHelper(size * 0.8);
+                    this.groups.axes.add(axesHelper);
+                    ['X','Y','Z'].forEach((axis, i) => {
+                        const div = document.createElement('div'); div.className = 'axis-label'; div.textContent = axis;
+                        const label = new CSS2DObject(div); label.position.setComponent(i, size); this.groups.axes.add(label);
+                    });
+                }
+            }
+            updateHKLPlane(h,k,l,visible,a,supercell) {
+                this.groups.hkl.clear();
+                if(!visible || (h===0&&k===0&&l===0)) return;
+                const normal = new THREE.Vector3(h,k,l).normalize();
+                const dist = a / Math.sqrt(h*h+k*k+l*l);
+                const planeGeom = new THREE.PlaneGeometry(a*supercell*2.5, a*supercell*2.5);
+                const planeMesh = new THREE.Mesh(planeGeom, this.hklPlaneMaterial);
+                planeMesh.quaternion.setFromUnitVectors(new THREE.Vector3(0,0,1), normal);
+                const planeCenter = new THREE.Vector3().copy(normal).multiplyScalar(dist);
+                planeMesh.position.copy(planeCenter);
+                this.groups.hkl.add(planeMesh);
+                
+                const arrowLength = a * 0.7, shaftRadius = a * 0.02, headLength = a * 0.15, headRadius = a * 0.06;
+                const arrow = new THREE.Group();
+                const shaft = new THREE.Mesh(new THREE.CylinderGeometry(shaftRadius, shaftRadius, arrowLength - headLength, 12), this.arrowMaterial);
+                shaft.position.y = (arrowLength - headLength) / 2;
+                const head = new THREE.Mesh(new THREE.ConeGeometry(headRadius, headLength, 12), this.arrowMaterial);
+                head.position.y = arrowLength - headLength/2;
+                arrow.add(shaft, head);
+                arrow.position.copy(planeCenter);
+                arrow.quaternion.setFromUnitVectors(new THREE.Vector3(0,1,0), normal);
+                this.groups.hkl.add(arrow);
+            }
+            onWindowResize() {
+                const rect = this.container.getBoundingClientRect();
+                this.renderer.setSize(rect.width, rect.height);
+                this.labelRenderer.setSize(rect.width, rect.height);
+                this.camera.aspect = rect.width / rect.height;
+                this.camera.updateProjectionMatrix();
+            }
+            onMouseMove(e) {
+                const rect = this.renderer.domElement.getBoundingClientRect();
+                this.mouse.x = ((e.clientX-rect.left)/rect.width)*2-1; this.mouse.y = -((e.clientY-rect.top)/rect.height)*2+1;
+                this.raycaster.setFromCamera(this.mouse,this.camera);
+                const intersects = this.raycaster.intersectObjects(this.groups.atoms.children);
+                if (intersects.length > 0) {
+                    const obj = intersects[0].object;
+                    if(this.currentHovered !== obj) {
+                       this.tooltip.style.display = 'block'; this.tooltip.innerHTML = `${obj.userData.element} Atom`;
+                       this.currentHovered = obj;
+                    }
+                    this.tooltip.style.left = `${e.clientX - rect.left + 15}px`; this.tooltip.style.top = `${e.clientY - rect.top + 5}px`;
+                } else if(this.currentHovered) {
+                    this.tooltip.style.display = 'none'; this.currentHovered = null;
+                }
+            }
+            onMouseClick() {
+                this.raycaster.setFromCamera(this.mouse,this.camera);
+                const intersects = this.raycaster.intersectObjects(this.groups.atoms.children);
+                if(this.currentSelected) { this.currentSelected.material = this.currentSelected.userData.baseMaterial; }
+                const inspectorPanel = document.getElementById('inspector-panel');
+                if (intersects.length > 0) {
+                    this.currentSelected = intersects[0].object; this.currentSelected.material = this.highlightMaterial;
+                    const {fractional,cartesian,element} = this.currentSelected.userData;
+                    inspectorPanel.innerHTML = `<div class="w-full text-left"><p class="font-semibold text-main">${element} Atom</p><p class="mt-1 text-secondary"><strong class="font-medium">Frac:</strong> [${fractional.x.toFixed(2)},${fractional.y.toFixed(2)},${fractional.z.toFixed(2)}]</p><p class="text-secondary"><strong class="font-medium">Cart:</strong> [${cartesian.x.toFixed(2)},${cartesian.y.toFixed(2)},${cartesian.z.toFixed(2)}] Å</p></div>`;
+                } else { inspectorPanel.innerHTML = `<span class="text-secondary">No atom selected</span>`; this.currentSelected = null; }
+            }
+            toggleVisibility(what, visible) { if(this.groups[what]) this.groups[what].visible = visible; }
+            animate() { requestAnimationFrame(()=>this.animate()); this.controls.update(); this.renderer.render(this.scene,this.camera); this.labelRenderer.render(this.scene, this.camera); }
+        }
+
+        class App {
+            constructor() {
+                this.visualizer = new CrystalVisualizer(document.getElementById('webgl-container'));
+                this.initUI(); this.populateStructureTypes(); this.bindUI(); this.update();
+            }
+            initUI() {
+                this.structureTypeSelect=document.getElementById('structure-type-select');this.materialSelect=document.getElementById('material-select');this.supercellSelect=document.getElementById('supercell-select');this.infoPanel=document.getElementById('info-panel');this.hklH=document.getElementById('hkl-h');this.hklK=document.getElementById('hkl-k');this.hklL=document.getElementById('hkl-l');this.toggleHkl=document.getElementById('toggle-hkl');
+            }
+            populateStructureTypes() {
+                for (const key in CRYSTAL_DATA) { this.structureTypeSelect.innerHTML += `<option value="${key}">${CRYSTAL_DATA[key].name}</option>`; }
+                this.structureTypeSelect.value = 'diamond'; this.populateMaterials();
+            }
+            populateMaterials() {
+                const materials = CRYSTAL_DATA[this.structureTypeSelect.value].materials;
+                this.materialSelect.innerHTML = '';
+                for(const key in materials) { this.materialSelect.innerHTML += `<option value="${key}">${materials[key].name}</option>`; }
+            }
+            bindUI() {
+                this.structureTypeSelect.addEventListener('change', () => { this.populateMaterials(); this.update(); });
+                this.materialSelect.addEventListener('change', () => this.update());
+                this.supercellSelect.addEventListener('change', () => this.update());
+                ['hkl-h','hkl-k','hkl-l','toggle-hkl'].forEach(id => {
+                    const el = document.getElementById(id);
+                    if (el) el.addEventListener('change', () => this.updateHKL());
+                });
+                ['atoms','bonds','cell'].forEach(id => {
+                     const el = document.getElementById(`toggle-${id}`);
+                     if (el) el.addEventListener('change', (e) => this.visualizer.toggleVisibility(id === 'cell' ? 'cells' : id, e.target.checked));
+                });
+                const menuToggle = document.getElementById('menu-toggle');
+                const controlPanel = document.getElementById('controlPanel');
+                const mainContent = document.getElementById('main-content');
+                const menuIcon = document.getElementById('menu-icon');
+                const closePath = "M6 18L18 6M6 6l12 12";
+                const openPath = "M4 6h16M4 12h16M4 18h16";
+                
+                menuToggle.addEventListener('click', () => {
+                    const isOpen = !controlPanel.classList.contains('-translate-x-full');
+                    if (isOpen) {
+                        controlPanel.classList.add('-translate-x-full');
+                        mainContent.classList.remove('ml-96');
+                        menuIcon.innerHTML = `<path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="${openPath}"></path>`;
+                    } else {
+                        controlPanel.classList.remove('-translate-x-full');
+                        mainContent.classList.add('ml-96');
+                        menuIcon.innerHTML = `<path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="${closePath}"></path>`;
+                    }
+                    setTimeout(() => this.visualizer.onWindowResize(), 350);
+                });
+            }
+            update() {
+               document.getElementById('loader-container').style.display = 'flex';
+               setTimeout(() => {
+                   const structureData = CRYSTAL_DATA[this.structureTypeSelect.value];
+                   const materialData = structureData.materials[this.materialSelect.value];
+                   const supercell = parseInt(this.supercellSelect.value, 10);
+                   this.currentStructure = { structureData, materialData, supercell };
+                   this.visualizer.drawStructure(structureData, materialData, supercell);
+                   this.updateInfoPanel(structureData, materialData);
+                   document.getElementById('hkl-section').style.display = structureData.isCubic ? 'block' : 'none';
+                   this.updateHKL();
+               }, 50);
+            }
+            updateHKL() {
+                if (!this.currentStructure || !this.currentStructure.structureData.isCubic) return;
+                const { materialData, supercell } = this.currentStructure;
+                this.visualizer.updateHKLPlane(parseInt(this.hklH.value), parseInt(this.hklK.value), parseInt(this.hklL.value), this.toggleHkl.checked, materialData.lattice.a, supercell);
+            }
+            updateInfoPanel(structureData, materialData) {
+                let latticeParams = `a = ${materialData.lattice.a} Å`;
+                if(materialData.lattice.c) latticeParams += `, c = ${materialData.lattice.c} Å`;
+                this.infoPanel.innerHTML = `<div class="text-secondary"><strong class="font-medium text-main">Material:</strong> ${materialData.name}</div>
+                    <div class="text-secondary"><strong class="font-medium text-main">Structure:</strong> ${structureData.name}</div>
+                    <div class="text-secondary"><strong class="font-medium text-main">Lattice:</strong> ${latticeParams}</div>`;
+                for(const key in structureData.info) { this.infoPanel.innerHTML += `<div class="text-secondary"><strong class="font-medium text-main">${key}:</strong> ${structureData.info[key]}</div>`; }
+            }
+        }
+        document.addEventListener('DOMContentLoaded', () => { new App(); });
+    </script>
+</body>
+</html>

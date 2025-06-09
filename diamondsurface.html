@@ -1,0 +1,810 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Diamond Surface Chemistry Visualizer</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <script type="importmap">
+        {
+            "imports": {
+                "three": "https://cdn.jsdelivr.net/npm/three@0.164.1/build/three.module.js",
+                "three/addons/": "https://cdn.jsdelivr.net/npm/three@0.164.1/examples/jsm/"
+            }
+        }
+    </script>
+    <style>
+        @import url('https://fonts.googleapis.com/css2?family=Playfair+Display:wght@700&family=Poppins:wght@400;500&display=swap');
+        
+        body {
+            font-family: 'Poppins', sans-serif;
+            background-color: #FBF9F6; /* Light Sage Background */
+            color: #3D405B; /* Dark Blue-Gray Text */
+        }
+        
+        .control-panel {
+            background-color: rgba(251, 249, 246, 0.8); /* Semi-transparent background */
+            border-right: 1px solid rgba(234, 226, 216, 0.5);
+            backdrop-filter: blur(10px);
+            -webkit-backdrop-filter: blur(10px);
+        }
+        .control-panel::-webkit-scrollbar { width: 6px; }
+        .control-panel::-webkit-scrollbar-track { background: #FBF9F6; }
+        .control-panel::-webkit-scrollbar-thumb { background-color: #D6C3B3; border-radius: 10px; }
+        
+        .panel-header { border-bottom: 1px solid rgba(234, 226, 216, 0.8); }
+        .panel-section { background-color: rgba(255, 255, 255, 0.5); border: 1px solid #EAE2D8; }
+        .panel-footer { border-top: 1px solid rgba(234, 226, 216, 0.8); color: #8D8D8D; }
+        
+        .text-heading { font-family: 'Playfair Display', serif; color: #3D405B; }
+        .text-main { color: #3D405B; }
+        .text-secondary { color: #6D6A6A; }
+        
+        .selection-btn {
+            background-color: #F8F5F1;
+            border: 1px solid #EAE2D8;
+            color: #3D405B;
+            transition: all 0.2s ease-in-out;
+        }
+        .selection-btn:hover {
+             border-color: #E07A5F; /* Terracotta */
+             background-color: #FFF;
+        }
+        .selection-btn.active {
+            background-color: #E07A5F;
+            color: #FFFFFF;
+            border-color: #E07A5F;
+            box-shadow: 0 2px 4px rgba(224, 122, 95, 0.2);
+        }
+        
+        .tooltip-custom { background-color: rgba(255, 255, 255, 0.8); border: 1px solid #EAE2D8; color: #3D405B; backdrop-filter: blur(5px); }
+        .loader-spinner { border-top-color: #E07A5F; border-color: #EAE2D8; }
+        
+        #menu-toggle:hover { background-color: rgba(255,255,255,0.9); }
+    </style>
+</head>
+<body class="overflow-hidden">
+
+    <div class="relative w-full h-screen flex">
+        <aside id="controlPanel" class="w-full md:w-96 flex-shrink-0 control-panel flex flex-col h-full overflow-y-auto absolute md:relative top-0 left-0 transition-transform duration-300 ease-in-out transform z-20 md:transform-none">
+            <div class="p-6 panel-header">
+                <h1 class="text-3xl text-heading">Diamond Surfaces</h1>
+                <p class="text-sm text-secondary mt-1">Interactive Surface Chemistry</p>
+            </div>
+
+            <div class="p-6 space-y-8 flex-grow">
+                <section>
+                    <h2 class="text-xl font-semibold text-main mb-4 text-heading">1. Select Surface Cut</h2>
+                    <div id="surface-cut-selector" class="grid grid-cols-3 gap-2">
+                        <button data-cut="c100" class="p-4 rounded-lg selection-btn font-medium">100</button>
+                        <button data-cut="c111" class="p-4 rounded-lg selection-btn font-medium">111</button>
+                        <button data-cut="c110" class="p-4 rounded-lg selection-btn font-medium">110</button>
+                    </div>
+                </section>
+
+                <section>
+                    <h2 class="text-xl font-semibold text-main mb-4 text-heading">2. Select Termination</h2>
+                    <div id="termination-selector" class="grid grid-cols-3 gap-2">
+                         <button data-term="H" class="p-4 rounded-lg selection-btn font-medium">H</button>
+                         <button data-term="O" class="p-4 rounded-lg selection-btn font-medium">O</button>
+                         <button data-term="F" class="p-4 rounded-lg selection-btn font-medium">F</button>
+                         <button data-term="OH" class="p-4 rounded-lg selection-btn font-medium">OH</button>
+                    </div>
+                </section>
+                
+                <section>
+                    <h2 class="text-xl font-semibold text-main mb-4 text-heading">3. Export Structure</h2>
+                    <div class="grid grid-cols-1 gap-2">
+                         <button id="export-xyz-btn" class="p-4 rounded-lg selection-btn font-medium flex items-center justify-center space-x-2">
+                            <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-4l-4 4m0 0l-4-4m4 4V4"></path></svg>
+                            <span>Export as .xyz File</span>
+                        </button>
+                    </div>
+                </section>
+
+                <section>
+                    <h2 class="text-xl font-semibold text-main mb-4 text-heading">4. Information</h2>
+                    <div id="info-panel" class="p-4 panel-section rounded-lg space-y-4 text-sm">
+                        <div id="info-description" class="text-secondary leading-relaxed"></div>
+                        <div>
+                            <h3 class="font-bold text-main mb-2">Properties</h3>
+                            <ul id="info-properties" class="list-disc list-inside space-y-1 text-secondary"></ul>
+                        </div>
+                        <div>
+                            <h3 class="font-bold text-main mb-2">Fabrication</h3>
+                            <p id="info-fabrication" class="text-secondary"></p>
+                        </div>
+                        <div>
+                            <h3 class="font-bold text-main mb-2">Band Structure</h3>
+                            <img id="info-band-diagram" src="" alt="Band structure diagram" class="rounded-md bg-gray-100 border border-gray-200" onerror="this.src='https://placehold.co/400x250/f0f0f0/cccccc?text=Diagram+Not+Found'; this.onerror=null;"/>
+                        </div>
+                    </div>
+                </section>
+            </div>
+
+            <footer class="p-6 text-center text-xs panel-footer">
+                <p>Diamond Surface Visualizer | Sage & Terracotta</p>
+            </footer>
+        </aside>
+        
+        <main id="main-content" class="flex-1 h-full">
+            <div id="webgl-container" class="w-full h-full relative">
+                 <button id="menu-toggle" class="absolute top-4 left-4 z-30 p-2 bg-white/70 backdrop-blur-sm rounded-full md:hidden">
+                     <svg id="menu-icon" class="w-6 h-6 text-main" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 6h16M4 12h16M4 18h16"></path></svg>
+                </button>
+                <div id="loader-container" class="absolute inset-0 bg-[#FBF9F6] flex flex-col items-center justify-center z-10 transition-opacity duration-300">
+                    <div class="w-12 h-12 border-4 rounded-full animate-spin loader-spinner"></div>
+                    <p class="mt-4 text-secondary">Generating Surface...</p>
+                </div>
+                <div id="tooltip" class="absolute hidden tooltip-custom text-xs px-2 py-1 rounded-md shadow-lg z-50 pointer-events-none"></div>
+            </div>
+        </main>
+    </div>
+
+    <script type="module">
+        import * as THREE from 'three';
+        import { OrbitControls } from 'three/addons/controls/OrbitControls.js';
+
+        // --- DATA ---
+        const CPK_COLORS = { 'C': 0x303030, 'H': 0xFFFFFF, 'O': 0xFF0D0D, 'F': 0x90E050, 'OH': 0xFF0D0D, 'DEFAULT': 0xFF1493 };
+        const ATOM_RADII = { 'C': 0.77, 'H': 0.37, 'O': 0.66, 'F': 0.57, 'OH': 0.66 };
+        const DIAMOND_LATTICE_CONST = 3.567;
+
+        const DIAMOND_SURFACE_DATA = {
+            "c100": {
+                name: "Diamond (100) Surface",
+                available_terms: ['H', 'O', 'F'],
+                terminations: {
+                    "H": {
+                        name: "Hydrogen", bondLength: 1.09, reconstruction: "2x1",
+                        description: "Hydrogen termination on the reconstructed 2x1 surface. Each carbon in a surface dimer is terminated with one H atom, following tetrahedral bond angles.",
+                        properties: ["Negative Electron Affinity (NEA)", "p-type surface conductivity", "Forms 2x1 dimer reconstruction"],
+                        fabrication: "Achieved via hydrogen plasma exposure in a CVD reactor.",
+                        bandDiagram: "https://placehold.co/400x250/EAE2D8/3D405B?text=100-H+Band+Diagram"
+                    },
+                    "O": {
+                        name: "Oxygen (Ether Bridge)", bondLength: 1.43, reconstruction: "bridge",
+                        description: "Oxygen can form stable C-O-C ether bridges across the dimer rows of the (100) surface. This creates a stable, insulating surface with Positive Electron Affinity (PEA).",
+                        properties: ["Positive Electron Affinity (PEA)", "Electrically Insulating", "Forms C-O-C ether bridges"],
+                        fabrication: "Gentle thermal oxidation of a hydrogenated surface or specific acid treatments.",
+                        bandDiagram: "https://placehold.co/400x250/EAE2D8/3D405B?text=100-O+Band+Diagram"
+                    },
+                    "F": {
+                        name: "Fluorine", bondLength: 1.35, reconstruction: "2x1",
+                        description: "Fluorine terminates the 2x1 reconstructed surface similarly to hydrogen, forming strong, stable C-F bonds at the correct tetrahedral angles.",
+                        properties: ["Positive Electron Affinity (PEA)", "Super-hydrophobic", "Chemically inert"],
+                        fabrication: "Plasma fluorination (e.g., with XeF2 or CF4) or wet-chemical methods.",
+                        bandDiagram: "https://placehold.co/400x250/EAE2D8/3D405B?text=100-F+Band+Diagram"
+                    }
+                }
+            },
+            "c111": {
+                name: "Diamond (111) Surface",
+                available_terms: ['H', 'OH', 'F'],
+                terminations: {
+                    "H": {
+                        name: "Hydrogen", bondLength: 1.09, reconstruction: "1x1",
+                        description: "On the (111) surface, hydrogen stabilizes an ideal 'bulk-like' 1x1 structure, saturating the single dangling bond on each surface carbon atom.",
+                        properties: ["Negative Electron Affinity (NEA)", "Highest hole mobility", "Stabilizes 1x1 structure"],
+                        fabrication: "Typically using hydrogen plasma or high-temperature annealing.",
+                        bandDiagram: "https://placehold.co/400x250/EAE2D8/3D405B?text=111-H+Band+Diagram"
+                    },
+                    "OH": {
+                        name: "Hydroxyl", bondLength: 1.43, reconstruction: "1x1",
+                        description: "Hydroxyl groups (C-O-H) can terminate the (111) surface, leading to a stable, insulating surface with a slight Positive Electron Affinity. This is a common result of oxidation treatments.",
+                        properties: ["Slight Positive Electron Affinity (PEA)", "Electrically Insulating", "Reduces surface recombination"],
+                        fabrication: "Controlled oxidation, e.g., via acid treatments (H2SO4/H2O2) or ozone exposure.",
+                        bandDiagram: "https://placehold.co/400x250/EAE2D8/3D405B?text=111-OH+Band+Diagram"
+                    },
+                    "F": {
+                        name: "Fluorine", bondLength: 1.35, reconstruction: "1x1",
+                        description: "Fluorine termination on the (111) surface is extremely stable due to the strong C-F bond. It yields a hydrophobic surface with a large electronic band gap.",
+                        properties: ["Largest surface dipole", "Very high thermal stability", "Extremely hydrophobic"],
+                        fabrication: "Often achieved using plasma-based fluorination with gases like CF4.",
+                        bandDiagram: "https://placehold.co/400x250/EAE2D8/3D405B?text=111-F+Band+Diagram"
+                    }
+                }
+            },
+             "c110": {
+                name: "Diamond (110) Surface",
+                available_terms: ['H', 'F'],
+                terminations: {
+                    "H": {
+                        name: "Hydrogen", bondLength: 1.09, reconstruction: "1x1",
+                        description: "The hydrogen-terminated (110) surface is characterized by zigzag chains of carbon atoms. It is stable with a 1x1 reconstruction and exhibits a Negative Electron Affinity.",
+                        properties: ["Negative Electron Affinity (NEA)", "Shows anisotropic conductivity", "Stable 1x1 surface"],
+                        fabrication: "Hydrogen plasma exposure is the most common method.",
+                        bandDiagram: "https://placehold.co/400x250/EAE2D8/3D405B?text=110-H+Band+Diagram"
+                    },
+                    "F": {
+                        name: "Fluorine", bondLength: 1.35, reconstruction: "1x1",
+                        description: "Fluorine termination on the (110) surface is exceptionally robust, creating a chemically inert, hydrophobic surface suitable for applications requiring high stability.",
+                        properties: ["Chemically inert", "Hydrophobic", "No surface states in band gap"],
+                        fabrication: "Plasma fluorination using sources like XeF2 or CF4.",
+                        bandDiagram: "https://placehold.co/400x250/EAE2D8/3D405B?text=110-F+Band+Diagram"
+                    }
+                }
+            }
+        };
+
+
+        // --- 3D VISUALIZER CLASS ---
+        class DiamondVisualizer {
+            constructor(container) {
+                this.container = container;
+                this.init();
+                this.animate();
+            }
+
+            init() {
+                this.scene = new THREE.Scene();
+                this.scene.background = new THREE.Color('#FBF9F6');
+                
+                this.camera = new THREE.PerspectiveCamera(50, this.container.clientWidth / this.container.clientHeight, 0.1, 2000);
+                this.renderer = new THREE.WebGLRenderer({ antialias: true, alpha: true });
+                this.renderer.setPixelRatio(window.devicePixelRatio);
+                this.container.appendChild(this.renderer.domElement);
+                
+                this.controls = new OrbitControls(this.camera, this.renderer.domElement);
+                this.controls.enableDamping = true;
+                this.controls.dampingFactor = 0.05;
+
+                this.scene.add(new THREE.AmbientLight(0xffffff, 2.5));
+                const dirLight = new THREE.DirectionalLight(0xffffff, 4);
+                dirLight.position.set(10, 15, 12);
+                this.scene.add(dirLight);
+
+                this.raycaster = new THREE.Raycaster();
+                this.mouse = new THREE.Vector2();
+                this.tooltip = document.getElementById('tooltip');
+                
+                this.modelGroup = new THREE.Group();
+                this.scene.add(this.modelGroup);
+                this.groups = { atoms: new THREE.Group(), bonds: new THREE.Group() };
+                this.modelGroup.add(this.groups.atoms);
+                this.modelGroup.add(this.groups.bonds);
+
+                this.materials = {
+                    'C': new THREE.MeshStandardMaterial({ color: CPK_COLORS.C, roughness: 0.4, metalness: 0.2 }),
+                    'H': new THREE.MeshStandardMaterial({ color: CPK_COLORS.H, roughness: 0.6, metalness: 0.1, side: THREE.DoubleSide }),
+                    'O': new THREE.MeshStandardMaterial({ color: CPK_COLORS.O, roughness: 0.4, metalness: 0.2 }),
+                    'F': new THREE.MeshStandardMaterial({ color: CPK_COLORS.F, roughness: 0.4, metalness: 0.2 }),
+                    'OH': new THREE.MeshStandardMaterial({ color: CPK_COLORS.OH, roughness: 0.4, metalness: 0.2 }),
+                    'bond': new THREE.MeshStandardMaterial({ color: 0x8D9B87, roughness: 0.8 })
+                };
+
+                window.addEventListener('resize', () => this.onWindowResize());
+                this.renderer.domElement.addEventListener('mousemove', (e) => this.onMouseMove(e));
+                this.onWindowResize();
+            }
+            
+            clearScene() {
+                Object.values(this.groups).forEach(group => {
+                    group.traverse(child => {
+                        if (child.isMesh) {
+                            child.geometry.dispose();
+                        }
+                    });
+                    group.clear();
+                });
+                this.modelGroup.rotation.set(0,0,0);
+            }
+
+            createAtom(element, position) {
+                const radius = ATOM_RADII[element] * 0.5;
+                const name = { 'C': 'Carbon', 'H': 'Hydrogen', 'O': 'Oxygen', 'F': 'Fluorine', 'OH': 'Oxygen' }[element];
+                const atom = new THREE.Mesh(
+                    new THREE.SphereGeometry(radius, 20, 20),
+                    this.materials[element]
+                );
+                atom.position.copy(position);
+                atom.userData = { element: element, name: name };
+                this.groups.atoms.add(atom);
+                return atom;
+            }
+
+            createBond(pos1, pos2) {
+                const distance = pos1.distanceTo(pos2);
+                if (distance > 3) return; // Avoid creating excessively long bonds
+                
+                const bond = new THREE.Mesh(
+                    new THREE.CylinderGeometry(0.08, 0.08, distance, 8),
+                    this.materials.bond
+                );
+                bond.position.copy(pos1).lerp(pos2, 0.5);
+                bond.quaternion.setFromUnitVectors(new THREE.Vector3(0, 1, 0), new THREE.Vector3().subVectors(pos2, pos1).normalize());
+                this.groups.bonds.add(bond);
+            }
+            
+            getBasisVectors(normal) {
+                const tangent1 = new THREE.Vector3();
+                // To avoid issues with cross product when normal is aligned with the reference vector,
+                // choose a different reference vector.
+                const refVector = Math.abs(normal.z) < 0.9 ? new THREE.Vector3(0, 0, 1) : new THREE.Vector3(0, 1, 0);
+                
+                tangent1.crossVectors(normal, refVector).normalize();
+                const tangent2 = new THREE.Vector3().crossVectors(normal, tangent1).normalize();
+
+                return { u: tangent1, v: tangent2 };
+            }
+
+            generateSurface(surfaceCut, terminationData) {
+                this.clearScene();
+                
+                const a = DIAMOND_LATTICE_CONST;
+                // Diamond structure has a 2-atom basis on an FCC lattice
+                const basis = [new THREE.Vector3(0,0,0), new THREE.Vector3(0.25,0.25,0.25)];
+                const fcc_points = [new THREE.Vector3(0,0,0), new THREE.Vector3(0.5,0.5,0), new THREE.Vector3(0.5,0,0.5), new THREE.Vector3(0,0.5,0.5)];
+
+                // 1. Generate a large block of diamond crystal
+                let allAtomsPos = [];
+                const generationSize = 10;
+                for(let i = -generationSize; i < generationSize; i++) {
+                    for(let j = -generationSize; j < generationSize; j++) {
+                        for(let k = -generationSize; k < generationSize; k++) {
+                            fcc_points.forEach(fcc => {
+                                basis.forEach(b => {
+                                    const fracPos = new THREE.Vector3().addVectors(fcc, b).add(new THREE.Vector3(i,j,k));
+                                    allAtomsPos.push(new THREE.Vector3(fracPos.x * a, fracPos.y * a, fracPos.z * a));
+                                });
+                            });
+                        }
+                    }
+                }
+
+                const normal = this.getNormalFromCut(surfaceCut);
+                const { u: basis_u, v: basis_v } = this.getBasisVectors(normal);
+                
+                // 2. "Cut" a slab of atoms from the crystal along the desired plane (h,k,l)
+                const lateralSize = 3.0 * a;
+                let h,k,l;
+                if (surfaceCut === 'c100') { [h,k,l] = [1,0,0]; }
+                else if (surfaceCut === 'c111') { [h,k,l] = [1,1,1]; }
+                else if (surfaceCut === 'c110') { [h,k,l] = [1,1,0]; }
+                // const d_hkl = a / Math.sqrt(h**2 + k**2 + l**2); // Interplanar spacing
+                const thickness = 2.0 * a;
+
+                const plateAtomsPos = allAtomsPos.filter(p => {
+                    const depth = p.dot(normal);
+                    const u_proj = p.dot(basis_u);
+                    const v_proj = p.dot(basis_v);
+                    
+                    return Math.abs(depth) < thickness / 2 && Math.abs(u_proj) < lateralSize && Math.abs(v_proj) < lateralSize;
+                });
+
+                // Center the generated slab at the origin
+                const slabCenter = new THREE.Vector3();
+                if (plateAtomsPos.length > 0) {
+                    plateAtomsPos.forEach(p => slabCenter.add(p));
+                    slabCenter.divideScalar(plateAtomsPos.length);
+                    plateAtomsPos.forEach(p => p.sub(slabCenter));
+                }
+                
+                // Rotate the entire model group so the surface normal points "up" (along +Y axis) for easier viewing
+                const up = new THREE.Vector3(0, 1, 0);
+                const quaternion = new THREE.Quaternion().setFromUnitVectors(normal, up);
+                this.modelGroup.setRotationFromQuaternion(quaternion);
+
+                // 3. Create meshes for atoms and bonds
+                const carbonAtoms = plateAtomsPos.map(p => this.createAtom('C', p));
+                const bondMaxLength = a * 0.6; // A bit more than the C-C bond length
+                for(let i = 0; i < carbonAtoms.length; i++) {
+                    for(let j = i + 1; j < carbonAtoms.length; j++) {
+                        if (carbonAtoms[i].position.distanceTo(carbonAtoms[j].position) < bondMaxLength) {
+                            this.createBond(carbonAtoms[i].position, carbonAtoms[j].position);
+                        }
+                    }
+                }
+
+                // 4. Identify surface atoms (those with the highest Y coordinate after rotation)
+                let maxY = -Infinity;
+                carbonAtoms.forEach(atom => {
+                     const worldPos = atom.position.clone().applyQuaternion(quaternion);
+                     if(worldPos.y > maxY) maxY = worldPos.y;
+                });
+                const surfaceAtoms = carbonAtoms.filter(atom => {
+                     const worldPos = atom.position.clone().applyQuaternion(quaternion);
+                     return worldPos.y > maxY - 0.1;
+                });
+                
+                // 5. Apply surface reconstruction and termination based on selected options
+                const dimerPairs = (terminationData.reconstruction === '2x1' || terminationData.reconstruction === 'bridge') 
+                    ? this.getDimerPairs(surfaceAtoms) 
+                    : new Map();
+
+                if (terminationData.reconstruction === '2x1') {
+                    this.apply100Reconstruction(dimerPairs);
+                }
+                
+                if (terminationData.reconstruction === 'bridge') {
+                    this.terminate100_Ether(dimerPairs);
+                } else if (surfaceCut === 'c111' && terminationData.name === 'Hydroxyl') {
+                    this.terminate111_Hydroxyl(surfaceAtoms, carbonAtoms, bondMaxLength, terminationData);
+                } else if (surfaceCut === 'c100') {
+                     this.terminate100_Dimer(surfaceAtoms, dimerPairs, carbonAtoms, bondMaxLength, terminationData);
+                } else {
+                    this.terminateGeneric(surfaceAtoms, carbonAtoms, bondMaxLength, terminationData);
+                }
+
+                this.setupCamera();
+                document.getElementById('loader-container').style.display = 'none';
+            }
+            
+            /**
+             * Calculates the direction of a "dangling bond" for a surface atom.
+             * This is estimated by summing the vectors to its neighbors and negating the result,
+             * assuming tetrahedral bonding.
+             */
+            getDanglingBondVector(surfaceAtom, neighbors) {
+                let avgNeighborVec = new THREE.Vector3();
+                if (neighbors.length === 0) return new THREE.Vector3(0,0,1); // Failsafe
+
+                neighbors.forEach(neighbor => {
+                    avgNeighborVec.add(new THREE.Vector3().subVectors(neighbor.position, surfaceAtom.position));
+                });
+                return avgNeighborVec.negate().normalize();
+            }
+            
+            /** Generic termination for unreconstructed surfaces (like 111 and 110) */
+            terminateGeneric(surfaceAtoms, allCarbons, bondMaxLength, termData) {
+                 surfaceAtoms.forEach(surfaceAtom => {
+                    const neighbors = allCarbons.filter(c => c !== surfaceAtom && c.position.distanceTo(surfaceAtom.position) < bondMaxLength);
+                    const bondDir = this.getDanglingBondVector(surfaceAtom, neighbors);
+                    const termPos = new THREE.Vector3().copy(surfaceAtom.position).add(bondDir.multiplyScalar(termData.bondLength));
+                    const termAtom = this.createAtom(termData.name[0], termPos);
+                    this.createBond(surfaceAtom.position, termAtom.position);
+                });
+            }
+
+            /** Termination for reconstructed (100) surfaces (H, F) */
+            terminate100_Dimer(surfaceAtoms, dimerPairs, allCarbons, bondMaxLength, termData) {
+                surfaceAtoms.forEach(surfaceAtom => {
+                    const dimerPartner = dimerPairs.get(surfaceAtom);
+                    // Neighbors for dangling bond calculation include the dimer partner and sub-surface atoms
+                    const subNeighbors = allCarbons.filter(c => 
+                        c !== surfaceAtom && c !== dimerPartner && 
+                        c.position.distanceTo(surfaceAtom.position) < bondMaxLength);
+
+                    const neighbors = [dimerPartner, ...subNeighbors].filter(n => n); 
+                    const bondDir = this.getDanglingBondVector(surfaceAtom, neighbors);
+                    
+                    const termPos = new THREE.Vector3().copy(surfaceAtom.position).add(bondDir.multiplyScalar(termData.bondLength));
+                    const termAtom = this.createAtom(termData.name[0], termPos);
+                    this.createBond(surfaceAtom.position, termAtom.position);
+                });
+            }
+            
+            randomPerpendicularAxis(axis) {
+                let rand = new THREE.Vector3(Math.random() - 0.5, Math.random() - 0.5, Math.random() - 0.5).normalize();
+                const proj = axis.clone().multiplyScalar(rand.dot(axis));
+                rand.sub(proj); // Make it orthogonal
+                if (rand.lengthSq() < 1e-6) return this.randomPerpendicularAxis(axis); // Retry if vectors were collinear
+                return rand.normalize();
+            }
+
+            /** Special termination for (111) surface with Hydroxyl (OH) groups */
+            terminate111_Hydroxyl(surfaceAtoms, allCarbons, bondMaxLength, termData) {
+                surfaceAtoms.forEach(surfaceAtom => {
+                    const subNeighbors = allCarbons.filter(c => c !== surfaceAtom && c.position.distanceTo(surfaceAtom.position) < bondMaxLength);
+                    const c_o_bondDir = this.getDanglingBondVector(surfaceAtom, subNeighbors);
+
+                    // Create Oxygen atom
+                    const oxygenPos = new THREE.Vector3().copy(surfaceAtom.position).add(c_o_bondDir.clone().multiplyScalar(termData.bondLength));
+                    const oxygenAtom = this.createAtom('OH', oxygenPos); // 'OH' uses Oxygen properties
+                    this.createBond(surfaceAtom.position, oxygenAtom.position);
+
+                    // Create Hydrogen atom attached to the Oxygen
+                    const rotationAxis = this.randomPerpendicularAxis(c_o_bondDir);
+                    const o_h_bondDir = c_o_bondDir.clone().applyAxisAngle(rotationAxis, (180 - 105.4) * Math.PI / 180); // H-O-C bond angle
+                    const hydrogenPos = new THREE.Vector3().copy(oxygenPos).add(o_h_bondDir.multiplyScalar(0.96)); // O-H bond length
+                    const hydrogenAtom = this.createAtom('H', hydrogenPos);
+                    this.createBond(oxygenAtom.position, hydrogenAtom.position);
+                });
+            }
+
+            /** Special termination for (100) with C-O-C ether bridges */
+            terminate100_Ether(dimerPairs) {
+                const processed = new Set();
+                for (const [atom1, atom2] of dimerPairs.entries()) {
+                    if (processed.has(atom1) || processed.has(atom2)) continue;
+
+                    const midpoint = new THREE.Vector3().copy(atom1.position).lerp(atom2.position, 0.5);
+                    const upVec = this.getDanglingBondVector(atom1, [atom2]).add(this.getDanglingBondVector(atom2, [atom1])).normalize();
+
+                    const oxygenPos = midpoint.add(upVec.multiplyScalar(0.9)); // Place oxygen above the dimer midpoint
+                    const oxygenAtom = this.createAtom('O', oxygenPos);
+
+                    this.createBond(atom1.position, oxygenAtom.position);
+                    this.createBond(atom2.position, oxygenAtom.position);
+
+                    processed.add(atom1);
+                    processed.add(atom2);
+                }
+            }
+            
+            /** Finds pairs of surface atoms that are close enough to form dimers */
+            getDimerPairs(surfaceAtoms) {
+                const pairs = new Map();
+                let unpaired = [...surfaceAtoms];
+                const dimerDist = DIAMOND_LATTICE_CONST * 0.5;
+                 while(unpaired.length > 1) {
+                    let atom1 = unpaired.pop();
+                    let closestIndex = -1;
+                    let minDist = Infinity;
+                    
+                    for(let i = 0; i < unpaired.length; i++) {
+                        let dist = atom1.position.distanceTo(unpaired[i].position);
+                        if(dist < dimerDist && dist < minDist) {
+                            minDist = dist;
+                            closestIndex = i;
+                        }
+                    }
+                    if(closestIndex !== -1) {
+                        let atom2 = unpaired.splice(closestIndex, 1)[0];
+                        pairs.set(atom1, atom2);
+                        pairs.set(atom2, atom1);
+                    }
+                }
+                return pairs;
+            }
+            
+            /** Applies the 2x1 reconstruction by pulling dimer pairs closer together */
+            apply100Reconstruction(dimerPairs) {
+                const processed = new Set();
+                const dimerBondLength = DIAMOND_LATTICE_CONST * 0.1;
+                for (const [atom1, atom2] of dimerPairs.entries()) {
+                    if (processed.has(atom1) || processed.has(atom2)) continue;
+
+                    const midpoint = new THREE.Vector3().copy(atom1.position).lerp(atom2.position, 0.5);
+                    const dir = new THREE.Vector3().subVectors(atom2.position, atom1.position).normalize();
+                    
+                    atom1.position.copy(midpoint).addScaledVector(dir, -dimerBondLength / 2);
+                    atom2.position.copy(midpoint).addScaledVector(dir, dimerBondLength / 2);
+
+                    processed.add(atom1);
+                    processed.add(atom2);
+                }
+            }
+            
+            getNormalFromCut(surfaceCut) {
+                switch(surfaceCut) {
+                    case 'c100': return new THREE.Vector3(1,0,0).normalize();
+                    case 'c111': return new THREE.Vector3(1,1,1).normalize();
+                    case 'c110': return new THREE.Vector3(1,1,0).normalize();
+                    default: return new THREE.Vector3(1,0,0).normalize();
+                }
+            }
+            
+            setupCamera() {
+                requestAnimationFrame(() => {
+                    const boundingBox = new THREE.Box3().setFromObject(this.modelGroup);
+                    if (boundingBox.isEmpty()) return;
+
+                    const center = boundingBox.getCenter(new THREE.Vector3());
+                    const size = boundingBox.getSize(new THREE.Vector3());
+                    
+                    const maxDim = Math.max(size.x, size.z);
+                    const fitHeight = maxDim / (2 * Math.tan(Math.PI * this.camera.fov / 360));
+                    const fitWidth = fitHeight / this.camera.aspect;
+                    const distance = 1.1 * Math.max(fitHeight, fitWidth); 
+
+                    const elevationAngle = Math.PI / 6; 
+                    const yPos = distance * Math.sin(elevationAngle);
+                    const horizontalDist = distance * Math.cos(elevationAngle);
+
+                    this.camera.position.set(center.x, center.y + yPos, center.z + horizontalDist);
+                    
+                    this.controls.target.copy(center);
+                    this.controls.update();
+                });
+            }
+
+            onWindowResize() {
+                const rect = this.container.getBoundingClientRect();
+                this.renderer.setSize(rect.width, rect.height);
+                this.camera.aspect = rect.width / rect.height;
+                this.camera.updateProjectionMatrix();
+                this.setupCamera();
+            }
+
+            onMouseMove(event) {
+                const rect = this.renderer.domElement.getBoundingClientRect();
+                this.mouse.x = ((event.clientX - rect.left) / rect.width) * 2 - 1;
+                this.mouse.y = -((event.clientY - rect.top) / rect.height) * 2 + 1;
+                this.raycaster.setFromCamera(this.mouse, this.camera);
+                const intersects = this.raycaster.intersectObjects(this.groups.atoms.children);
+
+                if (intersects.length > 0) {
+                    const obj = intersects[0].object;
+                    if (this.currentHovered !== obj) {
+                        this.tooltip.style.display = 'block';
+                        this.tooltip.innerHTML = obj.userData.name;
+                        this.currentHovered = obj;
+                    }
+                    this.tooltip.style.left = `${event.clientX - rect.left + 15}px`;
+                    this.tooltip.style.top = `${event.clientY - rect.top + 5}px`;
+                } else if (this.currentHovered) {
+                    this.tooltip.style.display = 'none';
+                    this.currentHovered = null;
+                }
+            }
+
+            animate() {
+                requestAnimationFrame(() => this.animate());
+                this.controls.update();
+                this.renderer.render(this.scene, this.camera);
+            }
+
+            /**
+             * Exports the current atomic structure to an XYZ file and triggers a download.
+             * @param {string} filename - The desired filename for the downloaded file.
+             */
+            exportToXYZ(filename = 'diamond_surface.xyz') {
+                if (this.groups.atoms.children.length === 0) {
+                    console.warn("No atoms to export.");
+                    alert("Please generate a surface before exporting.");
+                    return;
+                }
+
+                const lines = [];
+                const atomMeshes = this.groups.atoms.children;
+
+                // Line 1: Atom count
+                lines.push(atomMeshes.length);
+
+                // Line 2: Comment line with structure information
+                const comment = `Diamond surface structure generated by visualizer. File: ${filename}`;
+                lines.push(comment);
+
+                // Get the rotation of the main model group to export coordinates in the viewed orientation
+                const rotation = this.modelGroup.quaternion;
+
+                atomMeshes.forEach(mesh => {
+                    // Handle the 'OH' case, which represents an Oxygen atom in the data.
+                    let elementSymbol = mesh.userData.element;
+                    if (elementSymbol === 'OH') {
+                        elementSymbol = 'O';
+                    }
+
+                    // Apply the model's rotation to the local position to get final coordinates
+                    const position = mesh.position.clone().applyQuaternion(rotation);
+
+                    // Format to XYZ standard: Element X Y Z, with fixed precision
+                    const line = `${elementSymbol}  ${position.x.toFixed(5)}  ${position.y.toFixed(5)}  ${position.z.toFixed(5)}`;
+                    lines.push(line);
+                });
+
+                // Create file content and trigger a download link
+                const fileContent = lines.join('\n');
+                const blob = new Blob([fileContent], { type: 'chemical/x-xyz' });
+                const link = document.createElement('a');
+
+                link.href = URL.createObjectURL(blob);
+                link.download = filename;
+                document.body.appendChild(link);
+                link.click();
+                
+                // Clean up the temporary link and URL object
+                document.body.removeChild(link);
+                URL.revokeObjectURL(link.href);
+            }
+        }
+
+        // --- UI CONTROLLER CLASS ---
+        class App {
+            constructor() {
+                this.visualizer = new DiamondVisualizer(document.getElementById('webgl-container'));
+                this.initUI();
+                this.bindUI();
+                this.update('c100', 'H'); // Initial state
+            }
+
+            initUI() {
+                this.surfaceCutSelector = document.getElementById('surface-cut-selector');
+                this.terminationSelector = document.getElementById('termination-selector');
+                this.infoDescription = document.getElementById('info-description');
+                this.infoProperties = document.getElementById('info-properties');
+                this.infoFabrication = document.getElementById('info-fabrication');
+                this.infoBandDiagram = document.getElementById('info-band-diagram');
+                this.exportBtn = document.getElementById('export-xyz-btn');
+            }
+            
+            bindUI() {
+                this.surfaceCutSelector.addEventListener('click', (e) => {
+                    const btn = e.target.closest('button');
+                    if (btn) {
+                        const newCut = btn.dataset.cut;
+                        const availableTerms = DIAMOND_SURFACE_DATA[newCut].available_terms;
+                        let newTerm = this.currentTermination;
+                        // If current termination is not available for the new cut, default to the first available one.
+                        if (!availableTerms.includes(newTerm)) {
+                            newTerm = availableTerms[0];
+                        }
+                        this.update(newCut, newTerm);
+                    }
+                });
+
+                this.terminationSelector.addEventListener('click', (e) => {
+                    const btn = e.target.closest('button');
+                    if (btn && !btn.hidden) {
+                        this.update(this.currentCut, btn.dataset.term);
+                    }
+                });
+                
+                this.exportBtn.addEventListener('click', () => this.handleExport());
+
+                // Mobile menu toggle logic
+                const menuToggle = document.getElementById('menu-toggle');
+                const controlPanel = document.getElementById('controlPanel');
+                const menuIcon = document.getElementById('menu-icon');
+                const closePath = "M6 18L18 6M6 6l12 12";
+                const openPath = "M4 6h16M4 12h16M4 18h16";
+
+                menuToggle.addEventListener('click', () => {
+                    const isOpen = !controlPanel.classList.contains('-translate-x-full');
+                    if (isOpen) {
+                        controlPanel.classList.add('-translate-x-full');
+                        menuIcon.innerHTML = `<path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="${openPath}"></path>`;
+                    } else {
+                        controlPanel.classList.remove('-translate-x-full');
+                         menuIcon.innerHTML = `<path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="${closePath}"></path>`;
+                    }
+                    // Adjust viewer size after transition completes
+                    setTimeout(() => this.visualizer.onWindowResize(), 350);
+                });
+            }
+
+            update(surfaceCut, termination) {
+                this.currentCut = surfaceCut;
+                this.currentTermination = termination;
+                
+                const surfaceData = DIAMOND_SURFACE_DATA[surfaceCut];
+                const termData = surfaceData.terminations[termination];
+                
+                // Update available termination buttons, hiding those not applicable for the current surface cut
+                const availableTerms = surfaceData.available_terms;
+                this.terminationSelector.querySelectorAll('button').forEach(btn => {
+                    btn.hidden = !availableTerms.includes(btn.dataset.term);
+                });
+
+                // Show loader while generating
+                document.getElementById('loader-container').style.display = 'flex';
+                
+                // Update active button styles
+                this.surfaceCutSelector.querySelectorAll('button').forEach(b => b.classList.toggle('active', b.dataset.cut === surfaceCut));
+                this.terminationSelector.querySelectorAll('button').forEach(b => b.classList.toggle('active', b.dataset.term === termination));
+
+                // Use a short timeout to allow the loader to render before the main thread is blocked by generation
+                setTimeout(() => {
+                    this.visualizer.generateSurface(surfaceCut, termData);
+                    this.updateInfoPanel(surfaceData, termData);
+                }, 50);
+            }
+
+            updateInfoPanel(surfaceData, termData) {
+                this.infoDescription.textContent = termData.description;
+                this.infoFabrication.textContent = termData.fabrication;
+                
+                this.infoProperties.innerHTML = '';
+                termData.properties.forEach(prop => {
+                    const li = document.createElement('li');
+                    li.textContent = prop;
+                    this.infoProperties.appendChild(li);
+                });
+
+                this.infoBandDiagram.src = termData.bandDiagram;
+                this.infoBandDiagram.alt = `${surfaceData.name} with ${termData.name} termination - band diagram`;
+            }
+
+            handleExport() {
+                const cutName = this.currentCut.substring(1); // e.g., c100 -> 100
+                const termName = this.currentTermination;
+                const filename = `diamond_${cutName}_${termName}.xyz`;
+                this.visualizer.exportToXYZ(filename);
+            }
+        }
+        
+        document.addEventListener('DOMContentLoaded', () => new App());
+    </script>
+</body>
+</html>

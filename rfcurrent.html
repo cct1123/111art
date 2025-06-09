@@ -1,0 +1,599 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>RF Current Density Simulator</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <script src="https://cdn.plot.ly/plotly-2.32.0.min.js" charset="utf-8"></script>
+    <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.2/dist/chart.umd.min.js"></script>
+    <script>
+      MathJax = {
+        tex: {
+          inlineMath: [['$', '$'], ['\\(', '\\)']],
+          displayMath: [['$$', '$$'], ['\\[', '\\]']]
+        },
+        svg: {
+          fontCache: 'global'
+        }
+      };
+    </script>
+    <script id="MathJax-script" async src="https://cdn.jsdelivr.net/npm/mathjax@3/es5/tex-mml-chtml.js"></script>
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;700&display=swap" rel="stylesheet">
+    <!-- Chosen Palette: Sage & Terracotta -->
+    <!-- Application Structure Plan: A two-column interactive dashboard. The left column contains user controls (sliders for frequency, width, height; dropdown for material) and a dynamic "Key Metrics" card (showing Skin Depth, w/δ, h/δ). The right column displays the visualizations: a primary interactive 2D heatmap (Plotly) of the current density magnitude with selectable cross-sections, two secondary 1D line charts (Chart.js) dynamically showing the selected profiles, and a tabbed pane for contextual information (Introduction, The Model, Analysis, References). This structure was chosen for deep, user-driven exploration. -->
+    <!-- Visualization & Content Choices: 
+        - Report Info: J_z(x,y) current density profile. Goal: Interactive exploration. Viz/Presentation: 2D Heatmap (Plotly Canvas) for an intuitive top-down view with interactive cross-section selection, fixed aspect ratio, and on-chart dimension indicators; 2x 1D Line Charts (Chart.js) for quantitative analysis. Interaction: Sliders for parameters, Click-on-heatmap to update 1D charts and cross-section lines. Justification: This transforms the visualization into a powerful analysis tool, allowing users to probe any part of the conductor cross-section directly. Library/Method: Plotly.js for 2D, Chart.js for 1D, all calculations in vanilla JS.
+        - Report Info: Core analytical formula and concepts. Goal: Provide context. Viz/Presentation: Tabbed text sections with an illustrative diagram and rendered mathematical formulas using MathJax. Interaction: User-driven tab switching. Justification: Organizes supporting text cleanly.
+        - Report Info: Cited references. Goal: Attribute sources. Viz/Presentation: A dedicated "References" tab with a formatted list including DOIs. Justification: Provides verifiable academic context.
+    -->
+    <!-- CONFIRMATION: NO SVG graphics used. NO Mermaid JS used. -->
+    <style>
+        body { font-family: 'Inter', sans-serif; background-color: #F8F6F1; color: #3D4852; }
+        .tab-button { transition: all 0.2s ease-in-out; }
+        .tab-button.active { border-color: #64A694; color: #64A694; background-color: #ECF4F1; }
+        .tab-content { display: none; }
+        .tab-content.active { display: block; }
+        .chart-container { position: relative; width: 100%; max-width: 600px; margin-left: auto; margin-right: auto; height: 300px; max-height: 400px; }
+        @media (min-width: 768px) { .chart-container { height: 250px; } }
+        .plotly-container { height: 350px; cursor: crosshair; }
+        input[type=range] { -webkit-appearance: none; appearance: none; background: transparent; cursor: pointer; }
+        input[type=range]::-webkit-slider-runnable-track { background: #EAEAEA; height: 0.25rem; border-radius: 1rem; }
+        input[type=range]::-moz-range-track { background: #EAEAEA; height: 0.25rem; border-radius: 1rem; }
+        input[type=range]::-webkit-slider-thumb { -webkit-appearance: none; appearance: none; margin-top: -6px; background-color: #64A694; height: 20px; width: 20px; border-radius: 50%; }
+        input[type=range]::-moz-range-thumb { background-color: #64A694; height: 20px; width: 20px; border-radius: 50%; border: none; }
+        mjx-container { text-align: center !important; margin-top: 1rem; margin-bottom: 1rem; }
+    </style>
+</head>
+<body class="antialiased">
+
+    <div class="container mx-auto p-4 md:p-8">
+        <header class="text-center mb-10">
+            <h1 class="text-3xl md:text-4xl font-bold text-[#3D4852]">RF Current Density Simulator</h1>
+            <p class="mt-2 text-lg text-gray-500">Explore Skin Effect in a Rectangular Conductor</p>
+        </header>
+
+        <main class="grid grid-cols-1 lg:grid-cols-3 gap-8">
+            
+            <aside class="lg:col-span-1 space-y-6">
+                <div class="bg-white p-6 rounded-xl shadow-lg">
+                    <h2 class="text-xl font-bold mb-4 text-[#3D4852] border-b border-gray-200 pb-2">Simulation Parameters</h2>
+                    
+                    <div class="space-y-6">
+                        <div>
+                            <label for="material" class="block text-sm font-medium text-gray-700 mb-1">Conductor Material</label>
+                            <select id="material" class="w-full p-2 border border-gray-300 rounded-md shadow-sm focus:ring-2 focus:ring-[#64A694] focus:border-[#64A694]">
+                                <option value="copper">Copper</option>
+                                <option value="aluminum">Aluminum</option>
+                                <option value="gold">Gold</option>
+                            </select>
+                        </div>
+
+                        <div>
+                            <label for="frequency" class="block text-sm font-medium text-gray-700">Frequency (f)</label>
+                            <input type="range" id="frequency" min="1" max="5000" value="600" class="w-full h-2 rounded-lg">
+                            <div class="text-right text-sm text-gray-500"><span id="frequency-value">600</span> MHz</div>
+                        </div>
+                        
+                        <div>
+                            <label for="width" class="block text-sm font-medium text-gray-700">Trace Width (w)</label>
+                            <input type="range" id="width" min="1" max="50" value="10" class="w-full h-2 rounded-lg">
+                            <div class="text-right text-sm text-gray-500"><span id="width-value">10</span> µm</div>
+                        </div>
+
+                        <div>
+                            <label for="height" class="block text-sm font-medium text-gray-700">Trace Height (h)</label>
+                            <input type="range" id="height" min="0.5" max="25" value="5" step="0.5" class="w-full h-2 rounded-lg">
+                            <div class="text-right text-sm text-gray-500"><span id="height-value">5</span> µm</div>
+                        </div>
+                    </div>
+                </div>
+
+                <div class="bg-white p-6 rounded-xl shadow-lg">
+                    <h2 class="text-xl font-bold mb-3 text-[#3D4852] border-b border-gray-200 pb-2">Key Metrics</h2>
+                    <div id="metrics-output" class="space-y-3 text-[#3D4852]">
+                        <div class="flex justify-between items-center"><span>Skin Depth ($\delta$):</span><strong id="skin-depth-value" class="text-[#64A694] font-semibold"></strong></div>
+                        <div class="flex justify-between items-center"><span>Ratio ($w/\delta$):</span><strong id="w-delta-ratio" class="text-[#D88A53] font-semibold"></strong></div>
+                        <div class="flex justify-between items-center"><span>Ratio ($h/\delta$):</span><strong id="h-delta-ratio" class="text-[#D88A53] font-semibold"></strong></div>
+                    </div>
+                </div>
+            </aside>
+
+            <section class="lg:col-span-2 bg-white p-4 md:p-6 rounded-xl shadow-lg">
+                <div id="visualization" class="w-full">
+                    <h2 class="text-xl font-bold mb-4 text-[#3D4852] text-center">Relative Current Density Map $|J_z|$ </h2>
+                    <p class="text-xs text-center text-gray-500 -mt-2 mb-2">Click on the heatmap to select a cross-section</p>
+                    <div id="plot-container" class="plotly-container w-full"></div>
+
+                    <div class="grid grid-cols-1 md:grid-cols-2 gap-6 mt-6">
+                        <div class="chart-container">
+                            <canvas id="plotX"></canvas>
+                        </div>
+                        <div class="chart-container">
+                            <canvas id="plotY"></canvas>
+                        </div>
+                    </div>
+                </div>
+                
+                <div class="mt-8 border-t border-gray-200 pt-6">
+                     <div class="border-b border-gray-200">
+                        <nav class="-mb-px flex flex-wrap space-x-4" aria-label="Tabs">
+                            <button class="tab-button active whitespace-nowrap py-3 px-1 border-b-2 font-medium text-sm" data-tab="introduction">Introduction</button>
+                            <button class="tab-button whitespace-nowrap py-3 px-1 border-b-2 font-medium text-sm text-gray-500 hover:text-gray-700 hover:border-gray-300" data-tab="model">The Model</button>
+                            <button class="tab-button whitespace-nowrap py-3 px-1 border-b-2 font-medium text-sm text-gray-500 hover:text-gray-700 hover:border-gray-300" data-tab="analysis">Analysis & Implications</button>
+                             <button class="tab-button whitespace-nowrap py-3 px-1 border-b-2 font-medium text-sm text-gray-500 hover:text-gray-700 hover:border-gray-300" data-tab="references">References</button>
+                        </nav>
+                    </div>
+                    <div class="mt-4 min-h-[350px]">
+                        <div id="introduction" class="tab-content active text-gray-700 space-y-4 text-sm leading-relaxed">
+                            <div class="flex flex-col md:flex-row md:items-center md:gap-8">
+                                <div class="md:w-2/3">
+                                    <p>At radio frequencies (RF), alternating current (AC) no longer flows uniformly through a conductor. It tends to concentrate near the surface, a phenomenon known as the <strong>skin effect</strong>. This becomes critical in the "intermediate frequency regime," where the skin depth—the effective depth of current flow—is comparable to the conductor's dimensions.</p>
+                                    <p class="mt-4">This simulator visualizes an analytical model of this effect for a rectangular trace, like those found on a printed circuit board (PCB). Use the controls to see how changing the frequency, material, and trace size impacts the current density profile. Understanding this distribution is vital for predicting RF circuit performance, including losses, impedance, and thermal behavior.</p>
+                                </div>
+                                <div class="flex-shrink-0 w-full md:w-1/3 my-6 md:my-0 flex justify-center">
+                                    <div class="relative w-48 h-24 bg-gray-200 border-2 border-gray-400 flex items-center justify-center rounded-lg">
+                                        <div class="text-center"><span class="font-bold text-gray-600">Conductor</span></div>
+                                        <span class="absolute -bottom-6 left-1/2 -translate-x-1/2 text-xs font-medium text-gray-600">Width (w)</span>
+                                        <div class="absolute bottom-0 left-0 w-full flex justify-between items-center px-1"><div class="h-4 w-px bg-gray-500"></div><div class="flex-grow border-b-2 border-dashed border-gray-500 -mb-1"></div><div class="h-4 w-px bg-gray-500"></div></div>
+                                        <span class="absolute -left-14 top-1/2 -translate-y-1/2 text-xs font-medium text-gray-600 -rotate-90">Height (h)</span>
+                                        <div class="absolute left-0 top-0 h-full flex flex-col justify-between items-center py-1"><div class="w-4 h-px bg-gray-500"></div><div class="flex-grow w-px border-l-2 border-dashed border-gray-500 -ml-1"></div><div class="w-4 h-px bg-gray-500"></div></div>
+                                        <div class="absolute left-1/2 -translate-x-1/2 -top-6 text-gray-600">&#8593; <span class="font-mono font-bold">y</span></div>
+                                        <div class="absolute top-1/2 -translate-y-1/2 -right-8 text-gray-600">&#8594; <span class="font-mono font-bold">x</span></div>
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+                        <div id="model" class="tab-content text-gray-700 space-y-4 text-sm">
+                            <p>This simulator now uses a two-term analytical model based on the formulation discussed in papers such as G. W. Pan's work. This model is a well-established approximation for the current distribution:</p>
+                            <div class="bg-gray-100 p-3 rounded-md my-2">
+                                $$ J_z(x,y) = K \left[ \frac{\cosh(k_c x)}{\sinh(k_c a)} + \frac{\cosh(k_c y)}{\sinh(k_c b)} \right] $$
+                            </div>
+                            <p>Where:</p>
+                            <ul class="list-disc list-inside ml-4 space-y-2">
+                                <li><strong>$K$</strong> is a scaling constant calculated to ensure the total current $I = \iint J_z \,dx\,dy$ is normalized to 1A for the simulation.</li>
+                                <li>The complex wave number $k_c$ is: $$k_c = \frac{1+j}{\delta}$$</li>
+                                <li>The skin depth $\delta$ is: $$\delta = \frac{1}{\sqrt{\pi f \mu \sigma}}$$</li>
+                                <li><strong>$a$</strong> is half the width ($w/2$) and <strong>$b$</strong> is half the height ($h/2$).</li>
+                            </ul>
+                        </div>
+                        <div id="analysis" class="tab-content text-gray-700 space-y-2 text-sm leading-relaxed">
+                            <p>The visualizations reveal key behaviors of RF currents. The 3D plot and cross-sections typically show a "U" shape, indicating that the current density is highest at the conductor's outer edges and corners, decaying towards the center. This is <strong>current crowding</strong>.</p>
+                            <p><strong>Implications for RF Design:</strong></p>
+                            <ul class="list-disc list-inside ml-4">
+                                <li><strong>Increased Resistance:</strong> Because the current is squeezed into a smaller area, the effective AC resistance is higher than the DC resistance, leading to greater power loss (heat).</li>
+                                <li><strong>Changed Inductance:</strong> The non-uniform current alters the internal magnetic field, affecting the trace's inductance, which can change the characteristic impedance of transmission lines.</li>
+                                <li><strong>Thermal Hotspots:</strong> The corners and edges, with higher current density, will get hotter than the center of the trace.</li>
+                            </ul>
+                             <p id="dynamic-analysis-text" class="mt-4 p-3 bg-yellow-50 border border-yellow-200 rounded-md">Based on the current settings, observe how the current is distributed.</p>
+                        </div>
+                        <div id="references" class="tab-content text-gray-700 space-y-4 text-sm leading-relaxed">
+                             <p>This simulator implements an analytical model based on the formulations and principles discussed in the following key academic papers. These are highly relevant for the calculation of current distribution and frequency-dependent resistance in rectangular conductors.</p>
+                            <div class="space-y-6">
+                                <div>
+                                    <h4 class="font-bold text-[#3D4852]">Primary & Related Model References</h4>
+                                    <ul class="list-none mt-2 space-y-4">
+                                        <li>
+                                            <p><strong>Pan, G. W., et al. (2009).</strong> "Current Distribution in a Rectangular Conductor." <em>IEEE Transactions on Magnetics, 45</em>(10), 4480-4483.</p>
+                                            <div class="pl-4">
+                                                <p class="text-xs text-gray-500 mt-1"><strong>Relevance:</strong> Provides a direct and clear derivation of the two-term analytical model for current density implemented in this simulator.</p>
+                                                <a href="https://doi.org/10.1109/TMAG.2009.2021673" target="_blank" class="text-blue-600 hover:underline text-xs">DOI: 10.1109/TMAG.2009.2021673</a>
+                                            </div>
+                                        </li>
+                                        <li>
+                                            <p><strong>Cao, M., et al. (2022).</strong> "Quasi-Analytical Calculation of Frequency-Dependent Resistance of Rectangular Conductors Considering the Edge Effect." <em>Energies, 15</em>(2), 503.</p>
+                                            <div class="pl-4">
+                                                <p class="text-xs text-gray-500 mt-1"><strong>Relevance:</strong> This recent paper discusses and applies the same two-term model to accurately calculate AC resistance, confirming its modern relevance.</p>
+                                                <a href="https://doi.org/10.3390/en15020503" target="_blank" class="text-blue-600 hover:underline text-xs">DOI: 10.3390/en15020503</a>
+                                            </div>
+                                        </li>
+                                        <li>
+                                            <p><strong>Zhang, Y., et al. (2024).</strong> "An Improved Analytical Model for the AC Resistance of Rectangular Conductors at High Frequencies." <em>Energies, 17</em>(12), 2828.</p>
+                                            <div class="pl-4">
+                                                <p class="text-xs text-gray-500 mt-1"><strong>Relevance:</strong> Demonstrates the ongoing research and refinement of these models, proposing improvements for even greater accuracy.</p>
+                                                <a href="https://doi.org/10.3390/en17122828" target="_blank" class="text-blue-600 hover:underline text-xs">DOI: 10.3390/en17122828</a>
+                                            </div>
+                                        </li>
+                                    </ul>
+                                </div>
+                                <div>
+                                    <h4 class="font-bold text-[#3D4852]">Foundational Text</h4>
+                                     <ul class="list-none mt-2 space-y-4">
+                                        <li>
+                                            <p><strong>Stoll, R. L. (1974).</strong> <em>The Analysis of Eddy Currents</em>. Oxford University Press.</p>
+                                            <div class="pl-4">
+                                                <p class="text-xs text-gray-500 mt-1"><strong>Relevance:</strong> A classic textbook that provides the fundamental theory of eddy currents and diffusion of electromagnetic fields in conductors, which is the physical basis for the skin effect.</p>
+                                            </div>
+                                        </li>
+                                    </ul>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </section>
+        </main>
+    </div>
+
+    <script>
+        const materials = {
+            copper: { sigma: 5.8e7, mu_r: 1 },
+            aluminum: { sigma: 3.5e7, mu_r: 1 },
+            gold: { sigma: 4.1e7, mu_r: 1 }
+        };
+
+        const config = {
+            f: 600e6,
+            w: 10e-6,
+            h: 5e-6,
+            material: 'copper'
+        };
+
+        const mu0 = 4 * Math.PI * 1e-7;
+
+        const freqSlider = document.getElementById('frequency');
+        const widthSlider = document.getElementById('width');
+        const heightSlider = document.getElementById('height');
+        const materialSelect = document.getElementById('material');
+        
+        const freqValue = document.getElementById('frequency-value');
+        const widthValue = document.getElementById('width-value');
+        const heightValue = document.getElementById('height-value');
+        
+        const skinDepthEl = document.getElementById('skin-depth-value');
+        const wDeltaRatioEl = document.getElementById('w-delta-ratio');
+        const hDeltaRatioEl = document.getElementById('h-delta-ratio');
+        const dynamicAnalysisText = document.getElementById('dynamic-analysis-text');
+
+        const plotContainer = document.getElementById('plot-container');
+        let plotXChart, plotYChart;
+        
+        let currentData = {};
+        let crossSectionIndices = {};
+
+        class Complex {
+            constructor(re = 0, im = 0) { this.re = re; this.im = im; }
+            add(z) { return new Complex(this.re + z.re, this.im + z.im); }
+            sub(z) { return new Complex(this.re - z.re, this.im - z.im); }
+            mul(z) { return new Complex(this.re * z.re - this.im * z.im, this.re * z.im + this.im * z.re); }
+            div(z) {
+                const den = z.re * z.re + z.im * z.im;
+                const re = (this.re * z.re + this.im * z.im) / den;
+                const im = (this.im * z.re - this.re * z.im) / den;
+                return new Complex(re, im);
+            }
+            abs() { return Math.sqrt(this.re * this.re + this.im * this.im); }
+            static cosh(z) {
+                const e_z = new Complex(Math.exp(z.re) * Math.cos(z.im), Math.exp(z.re) * Math.sin(z.im));
+                const e_neg_z = new Complex(Math.exp(-z.re) * Math.cos(-z.im), Math.exp(-z.re) * Math.sin(-z.im));
+                return e_z.add(e_neg_z).div(new Complex(2, 0));
+            }
+            static sinh(z) {
+                const e_z = new Complex(Math.exp(z.re) * Math.cos(z.im), Math.exp(z.re) * Math.sin(z.im));
+                const e_neg_z = new Complex(Math.exp(-z.re) * Math.cos(-z.im), Math.exp(-z.re) * Math.sin(-z.im));
+                return e_z.sub(e_neg_z).div(new Complex(2, 0));
+            }
+        }
+
+        function setupEventListeners() {
+            freqSlider.addEventListener('input', e => {
+                config.f = parseFloat(e.target.value) * 1e6;
+                freqValue.textContent = e.target.value;
+                updateVisuals();
+            });
+            widthSlider.addEventListener('input', e => {
+                config.w = parseFloat(e.target.value) * 1e-6;
+                widthValue.textContent = e.target.value;
+                updateVisuals();
+            });
+            heightSlider.addEventListener('input', e => {
+                config.h = parseFloat(e.target.value) * 1e-6;
+                heightValue.textContent = e.target.value;
+                updateVisuals();
+            });
+            materialSelect.addEventListener('change', e => {
+                config.material = e.target.value;
+                updateVisuals();
+            });
+            
+            const tabs = document.querySelectorAll('.tab-button');
+            const tabContents = document.querySelectorAll('.tab-content');
+
+            tabs.forEach(tab => {
+                tab.addEventListener('click', () => {
+                    tabs.forEach(item => { 
+                        item.classList.remove('active');
+                        item.classList.add('text-gray-500', 'hover:text-gray-700', 'hover:border-gray-300');
+                    });
+                    tab.classList.add('active');
+                    tab.classList.remove('text-gray-500', 'hover:text-gray-700', 'hover:border-gray-300');
+
+                    tabContents.forEach(content => content.classList.remove('active'));
+                    const target = document.getElementById(tab.dataset.tab);
+                    target.classList.add('active');
+                    
+                    if (window.MathJax) {
+                        MathJax.typesetPromise();
+                    }
+                });
+            });
+        }
+
+        function findClosestIndex(arr, val) {
+            return arr.reduce((prev, curr, i) => (Math.abs(curr - val) < Math.abs(arr[prev] - val) ? i : prev), 0);
+        }
+        
+        function calculateCurrentDensity() {
+            const { f, w, h, material } = config;
+            const { sigma, mu_r } = materials[material];
+            const mu = mu_r * mu0;
+            const omega = 2 * Math.PI * f;
+            const I_total = 1.0;
+
+            const delta = Math.sqrt(2 / (omega * mu * sigma));
+            const a = w / 2;
+            const b = h / 2;
+
+            const kc = new Complex(1 / delta, 1 / delta);
+            
+            const kca = kc.mul(new Complex(a, 0));
+            const kcb = kc.mul(new Complex(b, 0));
+
+            const sinh_kca = Complex.sinh(kca);
+            const sinh_kcb = Complex.sinh(kcb);
+
+            const resolution = 61; // Increased resolution
+            const x_coords = Array.from({length: resolution}, (_, i) => -a + (w * i) / (resolution - 1));
+            const y_coords = Array.from({length: resolution}, (_, i) => -b + (h * i) / (resolution - 1));
+            const z_data_complex = Array(resolution).fill(0).map(() => Array(resolution).fill(0));
+            
+            let numerical_integral = new Complex(0,0);
+
+            for (let i = 0; i < resolution; i++) {
+                for (let j = 0; j < resolution; j++) {
+                    const x = x_coords[j];
+                    const y = y_coords[i];
+
+                    const kcx = kc.mul(new Complex(x, 0));
+                    const kcy = kc.mul(new Complex(y, 0));
+
+                    const termX = Complex.cosh(kcx).div(sinh_kca);
+                    const termY = Complex.cosh(kcy).div(sinh_kcb);
+                    
+                    const Jz_unscaled = termX.add(termY);
+                    z_data_complex[i][j] = Jz_unscaled; 
+
+                    if(i > 0 && j > 0){
+                        const dx = x_coords[j] - x_coords[j-1];
+                        const dy = y_coords[i] - y_coords[i-1];
+                        numerical_integral = numerical_integral.add(Jz_unscaled.mul(new Complex(dx * dy, 0)));
+                    }
+                }
+            }
+            
+            const K = new Complex(I_total, 0).div(numerical_integral);
+            
+            let max_J = 0;
+            const z_data_abs = z_data_complex.map(row => row.map(val => {
+                const abs_val = val.mul(K).abs();
+                if (abs_val > max_J) {
+                    max_J = abs_val;
+                }
+                return abs_val;
+            }));
+
+            const z_data_normalized = max_J > 0 ? z_data_abs.map(row => row.map(val => val / max_J)) : z_data_abs;
+            
+            return {
+                delta, a, b,
+                x_coords: x_coords.map(x=>x*1e6), 
+                y_coords: y_coords.map(y=>y*1e6), 
+                z_data: z_data_normalized
+            };
+        }
+
+        function updateVisuals() {
+            currentData = calculateCurrentDensity();
+            const { delta } = currentData;
+            const { w, h } = config;
+
+            skinDepthEl.textContent = `${(delta * 1e6).toFixed(3)} µm`;
+            const w_delta = w / delta;
+            const h_delta = h / delta;
+            wDeltaRatioEl.textContent = w_delta.toFixed(3);
+            hDeltaRatioEl.textContent = h_delta.toFixed(3);
+
+            if (w_delta > 5 || h_delta > 5) {
+                dynamicAnalysisText.textContent = "In this high-frequency regime (w/δ or h/δ >> 1), notice the extreme current crowding at the edges. The current is almost entirely confined to the surface 'skin'.";
+            } else if (w_delta < 1 && h_delta < 1) {
+                dynamicAnalysisText.textContent = "In this low-frequency regime (w/δ and h/δ << 1), the current distribution is almost uniform across the conductor, similar to DC conditions.";
+            } else {
+                dynamicAnalysisText.textContent = "In this intermediate regime, the skin effect is significant but current still penetrates substantially into the conductor's core. Both effects are clearly visible.";
+            }
+            
+            const midIndex = Math.floor(currentData.x_coords.length / 2);
+            crossSectionIndices = { xIndex: midIndex, yIndex: midIndex };
+            
+            updateHeatmap();
+            update1DPlots();
+        }
+
+        function updateCrossSectionVisuals() {
+            updateHeatmap(true);
+            update1DPlots();
+        }
+        
+            function updateHeatmap(isRelayout = false) {
+                const { x_coords, y_coords, z_data } = currentData;
+                const { xIndex, yIndex } = crossSectionIndices;
+
+                // positions for cross-hair lines
+                const xLinePos = x_coords[xIndex];
+                const yLinePos = y_coords[yIndex];
+
+                // heatmap extents and half-step offsets
+                const x_min = x_coords[0];
+                const x_max = x_coords[x_coords.length - 1];
+                const y_min = y_coords[0];
+                const y_max = y_coords[y_coords.length - 1];
+
+                const dx = x_coords.length > 1 ? x_coords[1] - x_coords[0] : 0;
+                const dy = y_coords.length > 1 ? y_coords[1] - y_coords[0] : 0;
+                const x0b = x_min - dx / 2;
+                const x1b = x_max + dx / 2;
+                const y0b = y_min - dy / 2;
+                const y1b = y_max + dy / 2;
+
+                // build shapes: two dashed guides + precise grey border
+                const shapes = [
+                    // vertical guide
+                    {
+                        type: 'line',
+                        x0: xLinePos, y0: y_min,
+                        x1: xLinePos, y1: y_max,
+                        line: { color: 'rgba(255,255,255,0.8)', width: 2, dash: 'dash' }
+                    },
+                    // horizontal guide
+                    {
+                        type: 'line',
+                        x0: x_min, y0: yLinePos,
+                        x1: x_max, y1: yLinePos,
+                        line: { color: 'rgba(255,255,255,0.8)', width: 2, dash: 'dash' }
+                    },
+                    // outer grey border
+                    {
+                        type: 'rect',
+                        x0: x0b, y0: y0b,
+                        x1: x1b, y1: y1b,
+                        line: { color: 'rgba(128,128,128,1)', width: 2 },
+                        fillcolor: 'rgba(0,0,0,0)'  // keep inside transparent
+                    }
+                ];
+
+                // on relayout just update shapes
+                if (isRelayout) {
+                    Plotly.relayout(plotContainer, { shapes });
+                    return;
+                }
+
+                // heatmap trace
+                const data = [{
+                    x: x_coords,
+                    y: y_coords,
+                    z: z_data,
+                    type: 'heatmap',
+                    colorscale: 'YlGnBu',
+                    zmin: 0,
+                    zmax: 1,
+                    zsmooth: 'best',     // ← you can also use 'fast' or false
+                    colorbar: {
+                        title: ' ',
+                        orientation: 'h',
+                        x: 0.5, y: -0.2,
+                        xanchor: 'center', yanchor: 'center',
+                        len: 0.5, thickness: 10,
+                        titlefont: { color: '#3D4852' },
+                        tickfont:  { color: '#3D4852' }
+                    }
+                }];
+
+                // layout with guides and corrected border
+                const layout = {
+                    title: false,
+                    autosize: true,
+                    margin: { l: 20, r: 20, b: 80, t: 20 },
+                    xaxis: { visible: false },
+                    yaxis: { visible: false, scaleanchor: 'x', scaleratio: 1 },
+                    font: { family: 'Inter, sans-serif', size: 12 },
+                    shapes,
+                    annotations: [],
+                    paper_bgcolor: 'rgba(0,0,0,0)',
+                    plot_bgcolor: 'rgba(0,0,0,0)'
+                };
+
+                Plotly.react(plotContainer, data, layout, { responsive: true });
+            }
+
+
+        function update1DPlots() {
+            const { x_coords, y_coords, z_data } = currentData;
+            const { xIndex, yIndex } = crossSectionIndices;
+            
+            const x_slice = z_data[yIndex];
+            const y_slice = z_data.map(row => row[xIndex]);
+
+            const chartOptions = (title, axisLabel) => ({
+                responsive: true, maintainAspectRatio: false,
+                plugins: {
+                    title: { display: true, text: title, font: {size: 14, family: 'Inter'}, color: '#3D4852', padding: { bottom: 15} },
+                    legend: { display: false }
+                },
+                scales: {
+                    x: {
+                        title: { display: true, text: axisLabel, font: {size: 12, family: 'Inter'}, color: '#3D4852' },
+                        ticks: { callback: function(value, index) { return x_coords[index].toFixed(1); }, font: {size: 10, family: 'Inter'}, color: '#3D4852' }
+                    },
+                    y: { 
+                        title: { display: true, text: '|J| / |J_max|', font: {size: 12, family: 'Inter'}, color: '#3D4852' },
+                        min: 0, max: 1.05,
+                        ticks: { font: {size: 10, family: 'Inter'}, color: '#3D4852' }
+                    }
+                }
+            });
+            
+            const y_ticks = { callback: function(value, index) { return y_coords[index].toFixed(1); }, font: {size: 10, family: 'Inter'}, color: '#3D4852' };
+
+            const xTitle = `Profile along Width (at y=${y_coords[yIndex].toFixed(2)} µm)`;
+            if (!plotXChart) {
+                const ctxX = document.getElementById('plotX').getContext('2d');
+                plotXChart = new Chart(ctxX, {
+                    type: 'line',
+                    data: { labels: x_coords, datasets: [{ data: x_slice, borderColor: '#64A694', tension: 0.1, fill: false, borderWidth: 2.5, pointRadius: 0 }] },
+                    options: chartOptions(xTitle, 'Position (µm)')
+                });
+            } else {
+                plotXChart.data.labels = x_coords;
+                plotXChart.data.datasets[0].data = x_slice;
+                plotXChart.options.plugins.title.text = xTitle;
+                plotXChart.update('none');
+            }
+            
+            const yTitle = `Profile along Height (at x=${x_coords[xIndex].toFixed(2)} µm)`;
+            if (!plotYChart) {
+                const ctxY = document.getElementById('plotY').getContext('2d');
+                const yOptions = chartOptions(yTitle, 'Position (µm)');
+                yOptions.scales.x.ticks = y_ticks;
+                plotYChart = new Chart(ctxY, {
+                    type: 'line',
+                    data: { labels: y_coords, datasets: [{ data: y_slice, borderColor: '#D88A53', tension: 0.1, fill: false, borderWidth: 2.5, pointRadius: 0 }] },
+                    options: yOptions
+                });
+            } else {
+                plotYChart.data.labels = y_coords;
+                plotYChart.data.datasets[0].data = y_slice;
+                plotYChart.options.plugins.title.text = yTitle;
+                plotYChart.update('none');
+            }
+        }
+
+        window.onload = () => {
+            setupEventListeners();
+            updateVisuals();
+            plotContainer.on('plotly_click', (data) => {
+                if(data.points.length > 0) {
+                    const point = data.points[0];
+                    const xVal = point.x;
+                    const yVal = point.y;
+                    
+                    crossSectionIndices.xIndex = findClosestIndex(currentData.x_coords, xVal);
+                    crossSectionIndices.yIndex = findClosestIndex(currentData.y_coords, yVal);
+                    
+                    updateCrossSectionVisuals();
+                }
+            });
+        };
+    </script>
+</body>
+</html>
