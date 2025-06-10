@@ -1,0 +1,708 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Diamond Dynamics CVD Simulator</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <script type="importmap">
+        {
+            "imports": {
+                "three": "https://cdn.jsdelivr.net/npm/three@0.164.1/build/three.module.js",
+                "three/addons/": "https://cdn.jsdelivr.net/npm/three@0.164.1/examples/jsm/"
+            }
+        }
+    </script>
+    <style>
+        @import url('https://fonts.googleapis.com/css2?family=Playfair+Display:wght@700&family=Poppins:wght@400;500&display=swap');
+        
+        :root {
+            /* Sage & Terracotta Theme (Default) */
+            --bg-body: #FBF9F6;
+            --c-text-primary: #3D405B;
+            --c-text-secondary: #6D6A6A;
+            --c-text-heading: #3D405B;
+            --c-accent: #E07A5F;
+            --bg-panel: rgba(251, 249, 246, 0.85);
+            --c-panel-border: rgba(234, 226, 216, 0.5);
+            --bg-section: rgba(255, 255, 255, 0.4);
+            --c-section-border: #EAE2D8;
+            --bg-slider-track: #EAE2D8;
+            --bg-btn: #F8F5F1;
+            --c-btn-border: #EAE2D8;
+            --c-btn-text: #3D405B;
+            --bg-btn-hover: #FFFFFF;
+            --c-btn-border-hover: #E07A5F;
+            --bg-menu-toggle: #FFFFFF;
+        }
+
+        body.plasma-mode {
+            /* Plasma Theme */
+            --bg-body: #101018;
+            --c-text-primary: #EAE2D8;
+            --c-text-secondary: #A0A0B0;
+            --c-text-heading: #FFFFFF;
+            --bg-panel: rgba(22, 22, 30, 0.85);
+            --c-panel-border: rgba(234, 226, 216, 0.2);
+            --bg-section: rgba(255, 255, 255, 0.05);
+            --c-section-border: rgba(234, 226, 216, 0.1);
+            --bg-slider-track: rgba(234, 226, 216, 0.2);
+            --bg-btn: rgba(255, 255, 255, 0.1);
+            --c-btn-border: rgba(234, 226, 216, 0.2);
+            --c-btn-text: #EAE2D8;
+            --bg-btn-hover: rgba(255, 255, 255, 0.2);
+            --bg-menu-toggle: #3D405B;
+        }
+
+        body {
+            font-family: 'Poppins', sans-serif;
+            background-color: var(--bg-body);
+            color: var(--c-text-primary);
+            overflow: hidden; /* Prevent scrollbars */
+            transition: background-color 0.3s ease;
+        }
+        
+        #webgl-container {
+            position: fixed; top: 0; left: 0; width: 100vw; height: 100vh;
+        }
+
+        .control-panel {
+            background-color: var(--bg-panel);
+            border-right: 1px solid var(--c-panel-border);
+            backdrop-filter: blur(12px);
+            -webkit-backdrop-filter: blur(12px);
+            box-shadow: 4px 0 20px rgba(0,0,0,0.05);
+        }
+        .control-panel::-webkit-scrollbar { width: 6px; }
+        .control-panel::-webkit-scrollbar-track { background: transparent; }
+        .control-panel::-webkit-scrollbar-thumb { background-color: #D6C3B3; border-radius: 10px; }
+        body.plasma-mode .control-panel::-webkit-scrollbar-thumb { background-color: #6D6A6A; }
+        
+        .panel-header { border-bottom: 1px solid var(--c-panel-border); }
+        .panel-section { background-color: var(--bg-section); border: 1px solid var(--c-section-border); }
+        
+        .text-heading { font-family: 'Playfair Display', serif; color: var(--c-text-heading); }
+        .text-main { color: var(--c-text-primary); }
+        .text-secondary { color: var(--c-text-secondary); }
+        
+        input[type=range] {
+            -webkit-appearance: none; appearance: none;
+            width: 100%; height: 6px;
+            background: var(--bg-slider-track);
+            border-radius: 5px; outline: none; transition: opacity .2s;
+        }
+        input[type=range]::-webkit-slider-thumb {
+            -webkit-appearance: none; appearance: none;
+            width: 20px; height: 20px;
+            background: var(--c-accent);
+            cursor: pointer; border-radius: 50%;
+            border: 2px solid var(--bg-body); box-shadow: 0 0 5px rgba(0,0,0,0.1);
+        }
+        input[type=range]::-moz-range-thumb {
+            width: 20px; height: 20px; background: var(--c-accent); cursor: pointer;
+            border-radius: 50%; border: 2px solid var(--bg-body); box-shadow: 0 0 5px rgba(0,0,0,0.1);
+        }
+
+        .action-btn {
+            background-color: var(--bg-btn);
+            border: 1px solid var(--c-btn-border);
+            color: var(--c-btn-text);
+            transition: all 0.2s ease-in-out;
+        }
+        .action-btn:hover {
+             border-color: var(--c-btn-border-hover);
+             background-color: var(--bg-btn-hover);
+        }
+        .action-btn.active {
+            background-color: var(--c-accent);
+            color: #FFFFFF;
+            border-color: var(--c-accent);
+        }
+        
+        #menu-toggle { background-color: var(--bg-menu-toggle); }
+
+        .loader-spinner { border-top-color: #E07A5F; border-right-color: transparent; border-bottom-color:#EAE2D8; border-left-color:transparent; }
+        
+        .info-gas-h2 { color: #6D6A6A; }
+        .info-gas-ch4 { color: #3D405B; }
+        .info-gas-n2 { color: #8D9B87; }
+        body.plasma-mode .info-gas-h2 { color: #A0A0B0; }
+        body.plasma-mode .info-gas-ch4 { color: #EAE2D8; }
+        body.plasma-mode .info-gas-n2 { color: #C080FF; }
+
+    </style>
+</head>
+<body>
+    <div id="webgl-container"></div>
+    <aside id="controlPanel" class="w-full sm:w-96 fixed top-0 left-0 h-full control-panel flex flex-col overflow-y-auto transition-transform duration-300 ease-in-out transform -translate-x-full z-20">
+        <div class="p-6 panel-header">
+            <h1 class="text-3xl text-heading">Diamond Dynamics</h1>
+            <p class="text-sm text-secondary mt-1">Gas Dynamics in Diamond CVD</p>
+        </div>
+
+        <div class="p-6 space-y-6 flex-grow">
+            <section>
+                <h2 class="text-xl font-semibold text-main mb-4 text-heading">Gas Ratio</h2>
+                <div class="space-y-5 p-4 panel-section rounded-lg">
+                    <div>
+                        <label for="h2-slider" class="flex justify-between text-sm font-medium text-secondary mb-1"><span>H₂ (Hydrogen)</span><span id="h2-value">400</span></label>
+                        <input type="range" id="h2-slider" min="0" max="800" value="400">
+                    </div>
+                    <div>
+                        <label for="ch4-slider" class="flex justify-between text-sm font-medium text-secondary mb-1"><span>CH₄ (Methane)</span><span id="ch4-value">40</span></label>
+                        <input type="range" id="ch4-slider" min="0" max="200" value="40">
+                    </div>
+                    <div>
+                        <label for="n2-slider" class="flex justify-between text-sm font-medium text-secondary mb-1"><span>N₂ (Nitrogen)</span><span id="n2-value">20</span></label>
+                        <input type="range" id="n2-slider" min="0" max="200" value="20">
+                    </div>
+                </div>
+            </section>
+
+            <section>
+                <h2 class="text-xl font-semibold text-main mb-4 text-heading">Conditions</h2>
+                <div class="p-4 panel-section rounded-lg">
+                    <div class="space-y-5">
+                        <div>
+                            <label for="temp-slider" class="flex justify-between text-sm font-medium text-secondary mb-1"><span>Temperature</span><span id="temp-value">900 °C</span></label>
+                            <input type="range" id="temp-slider" min="500" max="1500" value="900">
+                        </div>
+                        <div>
+                            <label for="pressure-slider" class="flex justify-between text-sm font-medium text-secondary mb-1"><span>Pressure (Density)</span><span id="pressure-value">1.50 atm</span></label>
+                            <input type="range" id="pressure-slider" min="0.1" max="5.0" value="1.5" step="0.1">
+                        </div>
+                    </div>
+                    <div class="pt-4 mt-4 border-t var(--c-panel-border)">
+                        <button id="plasma-toggle-btn" class="w-full p-3 rounded-lg action-btn font-medium text-sm">Enable Plasma</button>
+                    </div>
+                </div>
+            </section>
+
+            <section>
+                <h2 class="text-xl font-semibold text-main mb-4 text-heading">Process Roles</h2>
+                <div class="p-4 panel-section rounded-lg space-y-3 text-sm leading-relaxed">
+                    <p><strong class="font-semibold info-gas-h2">H₂:</strong> The dominant gas. Atomic hydrogen is crucial for etching away non-diamond carbon (graphite) and stabilizing the diamond surface.</p>
+                    <p><strong class="font-semibold info-gas-ch4">CH₄:</strong> The carbon source. It decomposes at high temperatures to provide carbon atoms for diamond growth.</p>
+                    <p><strong class="font-semibold info-gas-n2">N₂:</strong> A growth accelerator. Small amounts can significantly increase the diamond growth rate by influencing the gas-phase chemistry.</p>
+                </div>
+            </section>
+        </div>
+    </aside>
+    
+    <button id="menu-toggle" class="fixed top-4 left-4 z-30 p-3 bg-white/70 backdrop-blur-sm rounded-full shadow-lg">
+         <svg id="menu-icon" class="w-6 h-6 text-main" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 6h16M4 12h16M4 18h16"></path></svg>
+    </button>
+    <div id="pause-indicator" class="fixed top-6 right-6 text-secondary text-xs font-semibold uppercase tracking-wider hidden z-30">Paused</div>
+    <div id="loader-container" class="fixed inset-0 bg-[#FBF9F6] flex flex-col items-center justify-center z-50 transition-opacity duration-300">
+        <div class="w-12 h-12 border-4 rounded-full animate-spin loader-spinner"></div>
+        <p class="mt-4 text-secondary">Initializing Chamber...</p>
+    </div>
+
+    <script type="module">
+        import * as THREE from 'three';
+        import { OrbitControls } from 'three/addons/controls/OrbitControls.js';
+        import { EffectComposer } from 'three/addons/postprocessing/EffectComposer.js';
+        import { RenderPass } from 'three/addons/postprocessing/RenderPass.js';
+        import { UnrealBloomPass } from 'three/addons/postprocessing/UnrealBloomPass.js';
+
+        /*
+         A fast simplex noise implementation in 2D, 3D and 4D.
+         Based on implementation by Kurt Spencer at https://github.com/jwagner/simplex-noise.js
+         MIT License
+        */
+        class SimplexNoise {
+          constructor(r) {
+            if (r == undefined) r = Math;
+            this.grad3 = [[1,1,0],[-1,1,0],[1,-1,0],[-1,-1,0],[1,0,1],[-1,0,1],[1,0,-1],[-1,0,-1],[0,1,1],[0,-1,1],[0,1,-1],[0,-1,-1]];
+            this.p = [];
+            for (var i=0; i<256; i++) {
+              this.p[i] = Math.floor(r.random()*256);
+            }
+            this.perm = [];
+            for(var i=0; i<512; i++) {
+              this.perm[i]=this.p[i & 255];
+            }
+            this.F2 = 0.5*(Math.sqrt(3.0)-1.0);
+            this.G2 = (3.0-Math.sqrt(3.0))/6.0;
+          }
+          dot(g, x, y) {
+            return g[0]*x + g[1]*y;
+          }
+          noise(xin, yin) {
+            var n0, n1, n2;
+            var s = (xin+yin)*this.F2;
+            var i = Math.floor(xin+s);
+            var j = Math.floor(yin+s);
+            var t = (i+j)*this.G2;
+            var X0 = i-t;
+            var Y0 = j-t;
+            var x0 = xin-X0;
+            var y0 = yin-Y0;
+            var i1, j1;
+            if(x0>y0) {i1=1; j1=0;}
+            else {i1=0; j1=1;}
+            var x1 = x0 - i1 + this.G2;
+            var y1 = y0 - j1 + this.G2;
+            var x2 = x0 - 1.0 + 2.0 * this.G2;
+            var y2 = y0 - 1.0 + 2.0 * this.G2;
+            var ii = i & 255;
+            var jj = j & 255;
+            var gi0 = this.perm[ii+this.perm[jj]] % 12;
+            var gi1 = this.perm[ii+i1+this.perm[jj+j1]] % 12;
+            var gi2 = this.perm[ii+1+this.perm[jj+1]] % 12;
+            var t0 = 0.5 - x0*x0-y0*y0;
+            if(t0<0) n0 = 0.0;
+            else {
+              t0 *= t0;
+              n0 = t0 * t0 * this.dot(this.grad3[gi0], x0, y0);
+            }
+            var t1 = 0.5 - x1*x1-y1*y1;
+            if(t1<0) n1 = 0.0;
+            else {
+              t1 *= t1;
+              n1 = t1 * t1 * this.dot(this.grad3[gi1], x1, y1);
+            }
+            var t2 = 0.5 - x2*x2-y2*y2;
+            if(t2<0) n2 = 0.0;
+            else {
+              t2 *= t2;
+              n2 = t2 * t2 * this.dot(this.grad3[gi2], x2, y2);
+            }
+            return 70.0 * (n0 + n1 + n2);
+          }
+        }
+
+
+        class CVDApp {
+            constructor() {
+                this.simulation = new CVDSimulation(document.getElementById('webgl-container'));
+                this.initUI();
+                this.bindUI();
+                this.updateUIText();
+                this.handleParamsChange();
+            }
+
+            initUI() {
+                this.sliders = {
+                    h2: document.getElementById('h2-slider'),
+                    ch4: document.getElementById('ch4-slider'),
+                    n2: document.getElementById('n2-slider'),
+                    temp: document.getElementById('temp-slider'),
+                    pressure: document.getElementById('pressure-slider'),
+                };
+                this.values = {
+                    h2: document.getElementById('h2-value'),
+                    ch4: document.getElementById('ch4-value'),
+                    n2: document.getElementById('n2-value'),
+                    temp: document.getElementById('temp-value'),
+                    pressure: document.getElementById('pressure-value'),
+                };
+                this.plasmaBtn = document.getElementById('plasma-toggle-btn');
+            }
+            
+            bindUI() {
+                Object.values(this.sliders).forEach(slider => {
+                    slider.addEventListener('input', () => this.updateUIText());
+                    slider.addEventListener('change', () => this.handleParamsChange());
+                });
+                
+                const togglePlasmaAction = () => {
+                    this.simulation.togglePlasmaMode();
+                    this.plasmaBtn.textContent = this.simulation.isPlasmaMode ? 'Disable Plasma' : 'Enable Plasma';
+                    this.plasmaBtn.classList.toggle('active', this.simulation.isPlasmaMode);
+                };
+
+                this.plasmaBtn.addEventListener('click', togglePlasmaAction);
+                
+                // Add right-click listener to the rendering container to toggle plasma
+                this.simulation.container.addEventListener('contextmenu', (e) => {
+                    e.preventDefault();
+                    togglePlasmaAction();
+                });
+
+                this.plasmaBtn.classList.toggle('active', this.simulation.isPlasmaMode);
+
+                window.addEventListener('keydown', (event) => {
+                    if (event.code === 'Space') {
+                        event.preventDefault();
+                        this.simulation.toggleState();
+                    }
+                });
+
+                const menuToggle = document.getElementById('menu-toggle');
+                const controlPanel = document.getElementById('controlPanel');
+                const menuIcon = document.getElementById('menu-icon');
+                const closePath = "M6 18L18 6M6 6l12 12";
+                const openPath = "M4 6h16M4 12h16M4 18h16";
+
+                menuToggle.addEventListener('click', () => {
+                    const isOpen = !controlPanel.classList.contains('-translate-x-full');
+                    if (isOpen) {
+                        controlPanel.classList.add('-translate-x-full');
+                        menuIcon.innerHTML = `<path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="${openPath}"></path>`;
+                    } else {
+                        controlPanel.classList.remove('-translate-x-full');
+                        menuIcon.innerHTML = `<path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="${closePath}"></path>`;
+                    }
+                    setTimeout(() => this.simulation.onWindowResize(), 350);
+                });
+            }
+
+            getGasCounts() {
+                const baseCounts = {
+                    h2: parseInt(this.sliders.h2.value),
+                    ch4: parseInt(this.sliders.ch4.value),
+                    n2: parseInt(this.sliders.n2.value),
+                };
+                
+                const totalBase = Object.values(baseCounts).reduce((a, b) => a + b, 0);
+                if (totalBase === 0) return { h2: 0, ch4: 0, n2: 0 };
+
+                const pressure = parseFloat(this.sliders.pressure.value);
+                const MAX_MOLECULES = 800;
+                const minPressure = 0.1, maxPressure = 5.0;
+                
+                const totalMolecules = Math.round(
+                    ((pressure - minPressure) / (maxPressure - minPressure)) * (MAX_MOLECULES - 20) + 20
+                );
+
+                const finalCounts = {
+                    h2: Math.round((baseCounts.h2 / totalBase) * totalMolecules),
+                    ch4: Math.round((baseCounts.ch4 / totalBase) * totalMolecules),
+                    n2: Math.round((baseCounts.n2 / totalBase) * totalMolecules),
+                };
+                return finalCounts;
+            }
+
+            getTemperatureFactor() {
+                return Math.sqrt(parseInt(this.sliders.temp.value));
+            }
+            
+            updateUIText() {
+                this.values.h2.textContent = this.sliders.h2.value;
+                this.values.ch4.textContent = this.sliders.ch4.value;
+                this.values.n2.textContent = this.sliders.n2.value;
+                this.values.temp.textContent = `${this.sliders.temp.value} °C`;
+                this.values.pressure.textContent = `${parseFloat(this.sliders.pressure.value).toFixed(2)} atm`;
+            }
+
+            handleParamsChange() {
+                this.simulation.reset(this.getGasCounts(), this.getTemperatureFactor());
+            }
+        }
+        
+        class CVDSimulation {
+            constructor(container) {
+                this.container = container;
+                this.isRunning = true;
+                this.molecules = [];
+                
+                this.chamberSize = new THREE.Vector3(150, 150, 150);
+                this.baseSpeed = 0.025;
+                this.interactionRadius = 4.0;
+                
+                this.shakeTime = 0;
+                this.noise = new SimplexNoise();
+                this.shakePositionIntensity = 0.6;
+                this.shakeRotationIntensity = 0.1;
+
+                this.THEMES = {
+                    CLASSIC: {
+                        background: new THREE.Color('#FBF9F6'),
+                        fog: new THREE.Fog(0xFBF9F6, this.chamberSize.z * 0.75, this.chamberSize.z * 2),
+                        ambientLight: [0xffffff, 2.5],
+                        dirLight: [0xffffff, 4],
+                        atomColors: { 'C': 0x3D405B, 'H': 0xF0EFEA, 'N': 0x8D9B87 },
+                        bondColor: 0xC4C4C4
+                    },
+                    PLASMA: {
+                        background: new THREE.Color('#101018'),
+                        fog: new THREE.Fog(0x101018, this.chamberSize.z * 0.75, this.chamberSize.z * 2),
+                        ambientLight: [0xffffff, 0.5],
+                        dirLight: [0x8E7CC3, 2],
+                        atomColors: { 'C': 0x9090A0, 'H': 0xE0E0FF, 'N': 0xC080FF },
+                        bondColor: 0x888899
+                    }
+                };
+                this.isPlasmaMode = false; // Plasma is OFF by default
+
+                this.atomProps = {
+                    'C': { radius: 0.7 },
+                    'H': { radius: 0.45 },
+                    'N': { radius: 0.65 },
+                };
+
+                this.init();
+                this.animate();
+            }
+
+            init() {
+                this.scene = new THREE.Scene();
+
+                this.camera = new THREE.PerspectiveCamera(60, window.innerWidth / window.innerHeight, 0.1, 2000);
+                this.camera.position.set(0, 0, 50); // Camera starts closer to the center
+                
+                const renderer = new THREE.WebGLRenderer({ antialias: true });
+                renderer.setPixelRatio(window.devicePixelRatio);
+                renderer.toneMapping = THREE.ReinhardToneMapping;
+                this.renderer = renderer;
+                this.container.appendChild(this.renderer.domElement);
+                
+                this.controls = new OrbitControls(this.camera, this.renderer.domElement);
+                this.controls.enableDamping = true;
+                this.controls.enablePan = false;
+                this.controls.target.set(0, 0, 0);
+
+                this.ambientLight = new THREE.AmbientLight();
+                this.dirLight = new THREE.DirectionalLight();
+                this.dirLight.position.set(10, 20, 15);
+                this.scene.add(this.ambientLight);
+                this.scene.add(this.dirLight);
+
+                const renderScene = new RenderPass(this.scene, this.camera);
+                const bloomPass = new UnrealBloomPass(new THREE.Vector2(window.innerWidth, window.innerHeight), 1.5, 0.4, 0.85);
+                // Adjust bloom parameters for a stronger glow effect in plasma mode
+                bloomPass.threshold = 0.01;
+                bloomPass.strength = 2.0;
+                bloomPass.radius = 1.0;
+                // bloomPass.threshold = 0.05;
+                // bloomPass.strength = 1.2;
+                // bloomPass.radius = 0.8;
+
+                this.composer = new EffectComposer(renderer);
+                this.composer.addPass(renderScene);
+                this.composer.addPass(bloomPass);
+                
+                document.body.classList.toggle('plasma-mode', this.isPlasmaMode);
+                this.applyTheme();
+                this.onWindowResize();
+                document.getElementById('loader-container').style.display = 'none';
+            }
+
+            applyTheme() {
+                const theme = this.isPlasmaMode ? this.THEMES.PLASMA : this.THEMES.CLASSIC;
+                this.scene.background = theme.background;
+                this.scene.fog = theme.fog;
+                this.ambientLight.color.set(theme.ambientLight[0]);
+                this.ambientLight.intensity = theme.ambientLight[1];
+                this.dirLight.color.set(theme.dirLight[0]);
+                this.dirLight.intensity = theme.dirLight[1];
+
+                this.molecules.forEach(molecule => {
+                    molecule.children.forEach(mesh => {
+                        if (mesh.isMesh) {
+                            if (mesh.userData.isAtom) {
+                                const element = mesh.userData.element;
+                                mesh.material.color.set(theme.atomColors[element]);
+                                if (this.isPlasmaMode) {
+                                    mesh.material.emissive.set(theme.atomColors[element]);
+                                    // Increased emissive intensity for atoms
+                                    mesh.material.emissiveIntensity = 0.4;
+                                } else {
+                                    mesh.material.emissive.set(0x000000);
+                                    mesh.material.emissiveIntensity = 0;
+                                }
+                            } else { // Is a bond
+                                mesh.material.color.set(theme.bondColor);
+                                if (this.isPlasmaMode) {
+                                    mesh.material.emissive.set(0x444455);
+                                    // Increased emissive intensity for bonds
+                                    mesh.material.emissiveIntensity = 0.2;
+                                } else {
+                                    mesh.material.emissive.set(0x000000);
+                                    mesh.material.emissiveIntensity = 0;
+                                }
+                            }
+                        }
+                    });
+                });
+            }
+
+            togglePlasmaMode() {
+                this.isPlasmaMode = !this.isPlasmaMode;
+                document.body.classList.toggle('plasma-mode', this.isPlasmaMode);
+                this.applyTheme();
+            }
+
+            createMolecule(type) {
+                const group = new THREE.Group();
+                const atomGeo = new THREE.SphereGeometry(1, 12, 8);
+                const theme = this.isPlasmaMode ? this.THEMES.PLASMA : this.THEMES.CLASSIC;
+                
+                const createAtom = (element, position) => {
+                    const props = this.atomProps[element];
+                    const color = theme.atomColors[element];
+                    const mat = new THREE.MeshStandardMaterial({ color: color, roughness: 0.5, metalness: 0.1 });
+                    if (this.isPlasmaMode) {
+                        mat.emissive.set(color);
+                        // Increased emissive intensity for new atoms
+                        mat.emissiveIntensity = 0.7;
+                    }
+                    const atom = new THREE.Mesh(atomGeo, mat);
+                    atom.scale.setScalar(props.radius);
+                    atom.position.copy(position);
+                    atom.userData = { isAtom: true, element: element };
+                    group.add(atom);
+                    return atom;
+                };
+
+                const createBond = (p1, p2) => {
+                    const bondMat = new THREE.MeshStandardMaterial({ color: theme.bondColor, roughness: 0.8 });
+                     if (this.isPlasmaMode) {
+                        bondMat.emissive.set(0x444455);
+                        // Increased emissive intensity for new bonds
+                        bondMat.emissiveIntensity = 0.35;
+                    }
+                    const distance = p1.distanceTo(p2);
+                    const bondGeo = new THREE.CylinderGeometry(0.1, 0.1, distance, 5);
+                    const bond = new THREE.Mesh(bondGeo, bondMat);
+                    bond.position.copy(p1).lerp(p2, 0.5);
+                    bond.quaternion.setFromUnitVectors(new THREE.Vector3(0,1,0), new THREE.Vector3().subVectors(p2, p1).normalize());
+                    bond.userData = { isAtom: false };
+                    group.add(bond);
+                };
+                
+                switch(type) {
+                    case 'h2':
+                        const h1 = createAtom('H', new THREE.Vector3(-0.5, 0, 0));
+                        const h2 = createAtom('H', new THREE.Vector3(0.5, 0, 0));
+                        createBond(h1.position, h2.position);
+                        break;
+                    case 'n2':
+                        const n1 = createAtom('N', new THREE.Vector3(-0.6, 0, 0));
+                        const n2 = createAtom('N', new THREE.Vector3(0.6, 0, 0));
+                        createBond(n1.position, n2.position);
+                        break;
+                    case 'ch4':
+                        const c = createAtom('C', new THREE.Vector3());
+                        const ch_h1 = createAtom('H', new THREE.Vector3(0, 1, 0));
+                        const ch_h2 = createAtom('H', new THREE.Vector3(0.94, -0.33, 0));
+                        const ch_h3 = createAtom('H', new THREE.Vector3(-0.47, -0.33, 0.81));
+                        const ch_h4 = createAtom('H', new THREE.Vector3(-0.47, -0.33, -0.81));
+                        createBond(c.position, ch_h1.position); createBond(c.position, ch_h2.position);
+                        createBond(c.position, ch_h3.position); createBond(c.position, ch_h4.position);
+                        break;
+                }
+                
+                group.userData = {
+                    type: type,
+                    velocity: new THREE.Vector3((Math.random() - 0.5), (Math.random() - 0.5), (Math.random() - 0.5)).normalize(),
+                    angularVelocity: new THREE.Euler((Math.random() - 0.5) * 0.1, (Math.random() - 0.5) * 0.1, (Math.random() - 0.5) * 0.1, 'XYZ')
+                };
+                
+                return group;
+            }
+
+            updateParameters(gasCounts, tempFactor) {
+                this.molecules.forEach(m => this.scene.remove(m));
+                this.molecules = [];
+                this.tempFactor = tempFactor;
+                
+                for (const [type, count] of Object.entries(gasCounts)) {
+                    for (let i = 0; i < count; i++) {
+                        const molecule = this.createMolecule(type);
+                        molecule.position.set(
+                            (Math.random() - 0.5) * this.chamberSize.x,
+                            (Math.random() - 0.5) * this.chamberSize.y,
+                            (Math.random() - 0.5) * this.chamberSize.z
+                        );
+                        molecule.userData.velocity.multiplyScalar(this.baseSpeed * this.tempFactor);
+                        this.molecules.push(molecule);
+                        this.scene.add(molecule);
+                    }
+                }
+            }
+            
+            toggleState() {
+                this.isRunning = !this.isRunning;
+                document.getElementById('pause-indicator').style.display = this.isRunning ? 'none' : 'block';
+            }
+
+            reset(gasCounts, tempFactor) {
+                this.updateParameters(gasCounts, tempFactor);
+            }
+            
+            physicsStep() {
+                const halfSize = this.chamberSize.clone().multiplyScalar(0.5);
+                const force = new THREE.Vector3();
+                const repulsionConstant = 0.002;
+                const attractionConstant = 0.0001;
+                const deltaRotationQuaternion = new THREE.Quaternion();
+
+                for (let i = 0; i < this.molecules.length; i++) {
+                    const m1 = this.molecules[i];
+
+                    for (let j = i + 1; j < this.molecules.length; j++) {
+                        const m2 = this.molecules[j];
+                        const distance = m1.position.distanceTo(m2.position);
+                        
+                        if (distance < this.interactionRadius) {
+                            force.subVectors(m1.position, m2.position);
+                            const magnitude = -repulsionConstant / (distance * distance) + attractionConstant / distance;
+                            force.normalize().multiplyScalar(magnitude);
+                            m1.userData.velocity.add(force);
+                            m2.userData.velocity.sub(force);
+                        }
+                    }
+
+                    m1.position.add(m1.userData.velocity);
+                    deltaRotationQuaternion.setFromEuler(m1.userData.angularVelocity);
+                    m1.quaternion.multiplyQuaternions(deltaRotationQuaternion, m1.quaternion);
+
+                    if (m1.position.x > halfSize.x) m1.position.x = -halfSize.x;
+                    if (m1.position.x < -halfSize.x) m1.position.x = halfSize.x;
+                    if (m1.position.y > halfSize.y) m1.position.y = -halfSize.y;
+                    if (m1.position.y < -halfSize.y) m1.position.y = halfSize.y;
+                    if (m1.position.z > halfSize.z) m1.position.z = -halfSize.z;
+                    if (m1.position.z < -halfSize.z) m1.position.z = halfSize.z;
+                }
+            }
+
+            onWindowResize() {
+                this.renderer.setSize(window.innerWidth, window.innerHeight);
+                this.composer.setSize(window.innerWidth, window.innerHeight);
+                this.camera.aspect = window.innerWidth / window.innerHeight;
+                this.camera.updateProjectionMatrix();
+            }
+
+            animate() {
+                requestAnimationFrame(() => this.animate());
+                this.controls.update();
+                
+                if (this.isRunning) {
+                    this.physicsStep();
+                }
+
+                if (this.isPlasmaMode) {
+                    this.shakeTime += 0.4;
+                    
+                    const posShakeX = this.noise.noise(this.shakeTime, 0) * this.shakePositionIntensity;
+                    const posShakeY = this.noise.noise(0, this.shakeTime) * this.shakePositionIntensity;
+                    const rotShakeZ = this.noise.noise(this.shakeTime/50.0 + 50, 0) * this.shakeRotationIntensity;
+
+                    const originalPos = this.camera.position.clone();
+                    const originalRotZ = this.camera.rotation.z;
+
+                    this.camera.position.x += posShakeX;
+                    this.camera.position.y += posShakeY;
+                    this.camera.rotation.z += rotShakeZ;
+                    
+                    this.composer.render();
+
+                    this.camera.position.copy(originalPos);
+                    this.camera.rotation.z = originalRotZ;
+
+                } else {
+                    if (this.shakeTime !== 0) this.shakeTime = 0;
+                    this.renderer.render(this.scene, this.camera);
+                }
+            }
+        }
+        
+        document.addEventListener('DOMContentLoaded', () => {
+            new CVDApp();
+        });
+
+    </script>
+</body>
+</html>
