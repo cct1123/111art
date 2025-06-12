@@ -1,0 +1,496 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Butterfly Dynamics</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <script type="importmap">
+        {
+            "imports": {
+                "three": "https://cdn.jsdelivr.net/npm/three@0.164.1/build/three.module.js",
+                "three/addons/": "https://cdn.jsdelivr.net/npm/three@0.164.1/examples/jsm/"
+            }
+        }
+    </script>
+    <style>
+        @import url('https://fonts.googleapis.com/css2?family=Kiwi+Maru:wght@300&display=swap');
+        body {
+            margin: 0;
+            overflow: hidden;
+            background-color: #05020D;
+        }
+        #webgl-container {
+            position: fixed; top: 0; left: 0; width: 100vw; height: 100vh;
+        }
+        #title-container {
+            position: fixed;
+            top: 50%;
+            left: 50%;
+            transform: translate(-50%, -50%);
+            text-align: center;
+            z-index: 10;
+            pointer-events: none;
+            opacity: 1;
+            transition: opacity 2s ease-out 1s;
+            font-family: 'Kiwi Maru', serif;
+            color: #EAE2D8;
+        }
+        #title-container.hidden {
+            opacity: 0;
+        }
+        h1 {
+            font-size: 3rem;
+            font-weight: 300;
+            letter-spacing: 0.1em;
+            text-shadow: 0 0 15px rgba(255, 180, 220, 0.7);
+        }
+    </style>
+</head>
+<body>
+    <div id="webgl-container"></div>
+     <div id="title-container">
+        <h1>西行桜</h1>
+    </div>
+    <audio id="bg-music" loop>
+        <source src="https://vgmdownloads.com/soundtracks/touhou-youyoumu-perfect-cherry-blossom-ost/pomfpkpyta/1-16.%20Bloom%20Nobly%2C%20Ink-Black%20Cherry%20Blossom%20~%20Border%20of%20Life.mp3" type="audio/mpeg">
+    </audio>
+
+    <script type="module">
+        import * as THREE from 'three';
+        import { OrbitControls } from 'three/addons/controls/OrbitControls.js';
+        import { EffectComposer } from 'three/addons/postprocessing/EffectComposer.js';
+        import { RenderPass } from 'three/addons/postprocessing/RenderPass.js';
+        import { UnrealBloomPass } from 'three/addons/postprocessing/UnrealBloomPass.js';
+        
+        class ButterflySimulation {
+            constructor(container) {
+                this.container = container;
+                this.butterflies = [];
+                this.clock = new THREE.Clock();
+                
+                // Increased vertical chamber size
+                this.chamberSize = new THREE.Vector3(140, 140, 140);
+
+                this.init();
+                this.animate();
+            }
+
+            init() {
+                this.scene = new THREE.Scene();
+                this.scene.fog = new THREE.FogExp2(0x05020D, 0.009);
+
+                this.camera = new THREE.PerspectiveCamera(75, window.innerWidth / window.innerHeight, 0.1, 2000);
+                this.camera.position.set(0, 45, 120);
+                
+                const renderer = new THREE.WebGLRenderer({ antialias: true, powerPreference: "high-performance" });
+                renderer.setPixelRatio(window.devicePixelRatio);
+                renderer.setSize(window.innerWidth, window.innerHeight);
+                renderer.toneMapping = THREE.ACESFilmicToneMapping;
+                this.renderer = renderer;
+                this.container.appendChild(this.renderer.domElement);
+                
+                this.controls = new OrbitControls(this.camera, this.renderer.domElement);
+                this.controls.enableDamping = true;
+                this.controls.target.set(0, 20, 0);
+
+                this.scene.background = new THREE.Color('#05020D');
+                const ambientLight = new THREE.AmbientLight(0xffffff, 0.5);
+                this.scene.add(ambientLight);
+                
+                const dirLight = new THREE.DirectionalLight(0xae88d1, 2);
+                dirLight.position.set(10, 20, 15);
+                this.scene.add(dirLight);
+
+                const renderScene = new RenderPass(this.scene, this.camera);
+                const bloomPass = new UnrealBloomPass(new THREE.Vector2(window.innerWidth, window.innerHeight), 1.5, 0.4, 0.85);
+                bloomPass.threshold = 0;
+                bloomPass.strength = 1.8;
+                bloomPass.radius = 0.8;
+
+                this.composer = new EffectComposer(renderer);
+                this.composer.addPass(renderScene);
+                this.composer.addPass(bloomPass);
+                
+                this.createSakuraTree();
+                this.createGround();
+                this.createButterflies();
+
+                window.addEventListener('resize', this.onWindowResize.bind(this));
+                document.body.addEventListener('click', this.startMusic.bind(this), { once: true });
+                 setTimeout(() => {
+                    document.getElementById('title-container').classList.add('hidden');
+                }, 4000);
+            }
+            
+            startMusic() {
+                const audio = document.getElementById('bg-music');
+                audio.volume = 0.5;
+                audio.play().catch(e => console.error("Audio playback failed:", e));
+            }
+
+            createSakuraTree() {
+                const material = new THREE.MeshStandardMaterial({
+                    color: 0x4a2a2a,
+                    roughness: 0.8,
+                    emissive: 0x5a1f2f,
+                    emissiveIntensity: 6
+                });
+
+                const createBranch = (parent, level, length, thickness) => {
+                    if (level > 7) return null; 
+                    const branch = new THREE.Mesh(new THREE.CylinderGeometry(thickness * 0.8, thickness, length, 8), material);
+                    branch.position.y = length / 2;
+                    const holder = new THREE.Group();
+                    holder.position.y = length / 2;
+                    holder.add(branch);
+                    parent.add(holder);
+
+                    if (level > 4 && Math.random() > 0.6) {
+                        const flowerCount = Math.floor(Math.random() * 3 + 2);
+                        for(let i = 0; i < flowerCount; i++) {
+                            const flower = this.createSingleFlower();
+                            flower.position.set(
+                                (Math.random() - 0.5) * thickness * 5,
+                                (Math.random()) * length,
+                                (Math.random() - 0.5) * thickness * 5
+                            );
+                            flower.rotation.set(Math.random() * Math.PI, Math.random() * Math.PI, Math.random() * Math.PI);
+                            flower.scale.setScalar(Math.random() * 0.8 + 0.7);
+                            branch.add(flower);
+                        }
+                    }
+
+                    const numBranches = Math.floor(THREE.MathUtils.randFloat(2, 4)); 
+                    for (let i = 0; i < numBranches; i++) {
+                        const newBranch = createBranch(branch, level + 1, length * 0.8, thickness * 0.65);
+                        if (newBranch) {
+                            newBranch.rotation.x = THREE.MathUtils.randFloat(-Math.PI / 3, Math.PI / 3);
+                            newBranch.rotation.y = THREE.MathUtils.randFloat(0, Math.PI * 2);
+                            newBranch.rotation.z = THREE.MathUtils.randFloat(-Math.PI / 3, Math.PI / 3);
+                        }
+                    }
+                    return holder;
+                };
+                
+                const trunkHeight = 25;
+                const trunkRadius = 3.5;
+                
+                const trunk = new THREE.Mesh(new THREE.CylinderGeometry(trunkRadius, trunkRadius, trunkHeight, 16), material);
+                trunk.position.y = trunkHeight / 2 + 3;
+                this.scene.add(trunk);
+                
+                this.createRoots(trunk, material);
+
+                createBranch(trunk, 1, 20, trunkRadius);
+
+                this.coreLight = new THREE.PointLight(0xffa0e0, 250, 180);
+                this.coreLight.position.set(0, trunk.position.y + 5, 0); 
+                this.scene.add(this.coreLight);
+            }
+
+            createRoots(trunk, material) {
+                const numRoots = 7;
+                for (let i = 0; i < numRoots; i++) {
+                    const root = new THREE.Group();
+                    const angle = (i / numRoots) * Math.PI * 2 + (Math.random() - 0.5) * 0.5;
+                    
+                    let currentPos = new THREE.Vector3(0, 1, 0);
+                    let currentRadius = trunk.geometry.parameters.radiusTop * 1.5;
+                    let currentVec = new THREE.Vector3(Math.cos(angle), 0, Math.sin(angle));
+                    
+                    const rootSegments = 10;
+                    for (let j = 0; j < rootSegments; j++) {
+                        const segmentLength = Math.random() * 2 + 1;
+                        const segmentGeo = new THREE.CylinderGeometry(currentRadius * 0.8, currentRadius, segmentLength, 8);
+                        const segment = new THREE.Mesh(segmentGeo, material);
+                        
+                        segment.position.copy(currentPos);
+                        segment.quaternion.setFromUnitVectors(new THREE.Vector3(0, 1, 0), currentVec);
+                        root.add(segment);
+                        
+                        currentPos.add(currentVec.clone().multiplyScalar(segmentLength));
+                        currentRadius *= 0.85;
+                        currentVec.y -= 0.1;
+                        currentVec.x += (Math.random() - 0.5) * 0.4;
+                        currentVec.z += (Math.random() - 0.5) * 0.4;
+                        currentVec.normalize();
+                    }
+                    this.scene.add(root);
+                }
+            }
+            
+            createSingleFlower() {
+                const material = new THREE.MeshBasicMaterial({
+                    color: 0xffc0eb,
+                    blending: THREE.AdditiveBlending,
+                    depthWrite: false,
+                    transparent: true,
+                    opacity: 0.8
+                });
+                const geo = new THREE.SphereGeometry(0.7, 5, 3); 
+                const flower = new THREE.Mesh(geo, material);
+                return flower;
+            }
+
+            createGround() {
+                const groundGeo = new THREE.PlaneGeometry(300, 300);
+                const groundMat = new THREE.MeshStandardMaterial({
+                    color: 0x1a1a2a,
+                    metalness: 0.9,
+                    roughness: 0.2,
+                });
+                const ground = new THREE.Mesh(groundGeo, groundMat);
+                ground.rotation.x = -Math.PI / 2;
+                this.scene.add(ground);
+
+                const crystalGeo = new THREE.IcosahedronGeometry(0.5, 0);
+                const crystalMat = new THREE.MeshBasicMaterial({ color: 0x9e86a8, blending: THREE.AdditiveBlending, transparent: true, opacity: 0.3, depthWrite: false });
+                
+                const petalPileGeo = new THREE.SphereGeometry(1.5, 8, 6);
+                const petalPileMat = new THREE.MeshBasicMaterial({ color: 0xffc0eb, blending: THREE.AdditiveBlending, transparent: true, opacity: 0.1, depthWrite: false });
+
+                const distantCrystals = new THREE.InstancedMesh(crystalGeo, crystalMat, 400);
+                const nearDecorations = new THREE.Group();
+
+                const dummy = new THREE.Object3D();
+                for (let i = 0; i < 400; i++) {
+                    const angle = Math.random() * Math.PI * 2;
+                    const radius = 20 + Math.random() * 100;
+                    dummy.position.set( Math.cos(angle) * radius, Math.random() * 1.5, Math.sin(angle) * radius );
+                    const scale = Math.random() * 2 + 0.5;
+                    dummy.scale.set(scale, scale * (Math.random() * 1.5 + 0.5), scale);
+                    dummy.rotation.set(0, Math.random() * Math.PI, 0);
+                    dummy.updateMatrix();
+                    distantCrystals.setMatrixAt(i, dummy.matrix);
+                }
+                this.scene.add(distantCrystals);
+                
+                for (let i = 0; i < 150; i++) {
+                    const angle = Math.random() * Math.PI * 2;
+                    const radius = 5 + Math.random() * 15;
+                    const x = Math.cos(angle) * radius;
+                    const z = Math.sin(angle) * radius;
+
+                    if(Math.random() > 0.3) {
+                        const crystal = new THREE.Mesh(crystalGeo, crystalMat);
+                        crystal.position.set(x, Math.random() * 0.5, z);
+                        const scale = Math.random() * 1.5 + 0.5;
+                        crystal.scale.set(scale, scale * (Math.random() * 1.5 + 0.5), scale);
+                        nearDecorations.add(crystal);
+                    } else {
+                        const petalPile = new THREE.Mesh(petalPileGeo, petalPileMat);
+                        petalPile.position.set(x, 0.1, z);
+                        nearDecorations.add(petalPile);
+                    }
+                }
+                this.scene.add(nearDecorations);
+            }
+
+            createButterfly(color) {
+                const group = new THREE.Group();
+
+                const wingShaderMaterial = new THREE.ShaderMaterial({
+                    uniforms: {
+                        u_color: { value: new THREE.Color(color) },
+                        u_time: { value: 0 }
+                    },
+                    vertexShader: `
+                        varying vec2 vUv;
+                        void main() {
+                            vUv = uv;
+                            gl_Position = projectionMatrix * modelViewMatrix * vec4(position, 1.0);
+                        }
+                    `,
+                    fragmentShader: `
+                        uniform vec3 u_color;
+                        uniform float u_time;
+                        varying vec2 vUv;
+                        float julia(vec2 z, vec2 c) {
+                            float i = 0.0;
+                            for (float k = 0.0; k < 64.0; k++) {
+                                z = vec2(z.x * z.x - z.y * z.y, 2.0 * z.x * z.y) + c;
+                                if (dot(z, z) > 4.0) return i / 64.0;
+                                i++;
+                            }
+                            return 1.0;
+                        }
+                        void main() {
+                            vec2 c = vec2(-0.4, 0.6 + sin(u_time * 0.5) * 0.1);
+                            vec2 uv = (vUv - 0.5) * 2.0;
+                            float fractal = julia(uv, c);
+                            float glow = 1.0 - distance(vUv, vec2(0.5));
+                            gl_FragColor = vec4(u_color * fractal, fractal * glow * 0.8);
+                        }
+                    `,
+                    transparent: true,
+                    blending: THREE.AdditiveBlending,
+                    depthWrite: false,
+                    side: THREE.DoubleSide
+                });
+
+                const bodyMaterial = new THREE.MeshBasicMaterial({ color: 0x000000 });
+                const body = new THREE.Mesh(new THREE.CylinderGeometry(0.1, 0.1, 1.5, 8), bodyMaterial);
+                body.rotation.x = Math.PI / 2;
+                group.add(body);
+
+                const forewingShape = new THREE.Shape();
+                forewingShape.moveTo(0, 0);
+                forewingShape.bezierCurveTo(2, 1.5, 3, 3, 0, 3.5);
+                forewingShape.bezierCurveTo(-1, 2.5, -0.5, 1, 0, 0);
+                const forewingGeometry = new THREE.ShapeGeometry(forewingShape);
+
+                const hindwingShape = new THREE.Shape();
+                hindwingShape.moveTo(0, 0);
+                hindwingShape.bezierCurveTo(1.5, -1, 2.5, -2, 0, -2.5);
+                hindwingShape.bezierCurveTo(-1.5, -1.5, -0.5, -0.5, 0, 0);
+                const hindwingGeometry = new THREE.ShapeGeometry(hindwingShape);
+
+                const leftForewing = new THREE.Mesh(forewingGeometry, wingShaderMaterial);
+                leftForewing.position.x = 0.2;
+                leftForewing.rotation.y = -Math.PI / 1.5;
+                group.add(leftForewing);
+                
+                const rightForewing = new THREE.Mesh(forewingGeometry, wingShaderMaterial);
+                rightForewing.position.x = -0.2;
+                rightForewing.rotation.y = Math.PI / 1.5;
+                group.add(rightForewing);
+                
+                const leftHindwing = new THREE.Mesh(hindwingGeometry, wingShaderMaterial);
+                leftHindwing.position.x = 0.2;
+                leftHindwing.rotation.y = -Math.PI / 1.5;
+                group.add(leftHindwing);
+
+                const rightHindwing = new THREE.Mesh(hindwingGeometry, wingShaderMaterial);
+                rightHindwing.position.x = -0.2;
+                rightHindwing.rotation.y = Math.PI / 1.5;
+                group.add(rightHindwing);
+
+                group.scale.setScalar(1.8);
+
+                group.userData = {
+                    leftForewing, rightForewing, leftHindwing, rightHindwing,
+                    material: wingShaderMaterial,
+                    flapSpeed: Math.random() * 8 + 4,
+                    velocity: new THREE.Vector3((Math.random() - 0.5), (Math.random() - 0.5), (Math.random() - 0.5)).normalize().multiplyScalar(0.25),
+                    maxSpeed: Math.random() * 0.2 + 0.25,
+                    wanderAngle: Math.random() * Math.PI * 2
+                };
+                
+                return group;
+            }
+
+            createButterflies() {
+                const butterflyTypes = {
+                    type1: { color: 0xffc0eb, count: 100 },
+                    type2: { color: 0xdcb0ff, count: 30 },
+                    type3: { color: 0xffffff, count: 20 },
+                };
+
+                for (const type of Object.values(butterflyTypes)) {
+                    for (let i = 0; i < type.count; i++) {
+                        const butterfly = this.createButterfly(type.color);
+                        butterfly.position.set(
+                            (Math.random() - 0.5) * this.chamberSize.x,
+                            (Math.random() * 0.8 + 0.1) * this.chamberSize.y,
+                            (Math.random() - 0.5) * this.chamberSize.z
+                        );
+                        this.butterflies.push(butterfly);
+                        this.scene.add(butterfly);
+                    }
+                }
+            }
+            
+            physicsStep() {
+                const halfSize = this.chamberSize.clone().multiplyScalar(0.5);
+                
+                const treeAttraction = 0.0008; 
+                // Attraction point raised to match taller tree
+                const treePosition = new THREE.Vector3(0, 35, 0); 
+
+                for (let i = 0; i < this.butterflies.length; i++) {
+                    const b1 = this.butterflies[i];
+                    
+                    const toTree = treePosition.clone().sub(b1.position);
+                    b1.userData.velocity.add(toTree.normalize().multiplyScalar(treeAttraction));
+
+                    b1.userData.wanderAngle += (Math.random() - 0.5) * 0.5;
+                    const wanderForce = new THREE.Vector3(
+                        Math.cos(b1.userData.wanderAngle),
+                        (Math.random() - 0.5) * 0.3,
+                        Math.sin(b1.userData.wanderAngle)
+                    );
+                    wanderForce.normalize().multiplyScalar(0.08);
+                    b1.userData.velocity.add(wanderForce);
+
+                    b1.userData.velocity.clampLength(0, b1.userData.maxSpeed);
+                    b1.position.add(b1.userData.velocity);
+
+                    // Updated boundary checks for new chamber height
+                    if (Math.abs(b1.position.x) > halfSize.x) { b1.position.x = halfSize.x * Math.sign(b1.position.x); b1.userData.velocity.x *= -0.8; }
+                    if (b1.position.y < 0 || b1.position.y > this.chamberSize.y) { 
+                        b1.position.y = Math.max(0.1, b1.position.y); // Prevent getting stuck at y=0
+                        if (b1.position.y > this.chamberSize.y) {
+                           b1.position.y = this.chamberSize.y;
+                        }
+                        b1.userData.velocity.y *= -0.8; 
+                    }
+                    if (Math.abs(b1.position.z) > halfSize.z) { b1.position.z = halfSize.z * Math.sign(b1.position.z); b1.userData.velocity.z *= -0.8; }
+                }
+            }
+            
+            updateAndAnimateButterflies() {
+                this.physicsStep();
+                
+                const elapsed = this.clock.getElapsedTime();
+                for (const b of this.butterflies) {
+                    const ud = b.userData;
+                    const flapAngle = Math.sin(elapsed * ud.flapSpeed) * (Math.PI / 4);
+                    ud.leftForewing.rotation.z = flapAngle;
+                    ud.rightForewing.rotation.z = flapAngle;
+                    ud.leftHindwing.rotation.z = flapAngle * 0.8;
+                    ud.rightHindwing.rotation.z = flapAngle * 0.8;
+                    
+                    if(ud.material && ud.material.uniforms && ud.material.uniforms.u_time) {
+                        ud.material.uniforms.u_time.value = elapsed + b.id;
+                    }
+                    
+                    if (ud.velocity.length() > 0.01) {
+                         b.quaternion.slerp(new THREE.Quaternion().setFromUnitVectors(new THREE.Vector3(0, 1, 0), ud.velocity.clone().normalize()), 0.15);
+                    }
+                }
+            }
+            
+            updateGlow() {
+                const elapsed = this.clock.getElapsedTime();
+                const baseIntensity = 250;
+                const breath = (Math.sin(elapsed * 0.5) + 1) / 2;
+                const flutter = (Math.sin(elapsed * 3) + 1) / 2 * 0.5;
+                this.coreLight.intensity = baseIntensity + (breath * 50) + (flutter * 20);
+            }
+
+            onWindowResize() {
+                this.camera.aspect = window.innerWidth / window.innerHeight;
+                this.camera.updateProjectionMatrix();
+                this.renderer.setSize(window.innerWidth, window.innerHeight);
+                this.composer.setSize(window.innerWidth, window.innerHeight);
+            }
+
+            animate() {
+                requestAnimationFrame(() => this.animate());
+                this.controls.update();
+                
+                this.updateAndAnimateButterflies();
+                this.updateGlow();
+                
+                this.composer.render();
+            }
+        }
+        
+        document.addEventListener('DOMContentLoaded', () => {
+            new ButterflySimulation(document.getElementById('webgl-container'));
+        });
+
+    </script>
+</body>
+</html>

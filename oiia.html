@@ -1,0 +1,345 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Cosmic Catnip Trip - Combined Overdrive</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <script type="importmap">
+        {
+            "imports": {
+                "three": "https://cdn.jsdelivr.net/npm/three@0.164.1/build/three.module.js",
+                "three/addons/": "https://cdn.jsdelivr.net/npm/three@0.164.1/examples/jsm/"
+            }
+        }
+    </script>
+    <style>
+        @import url('https://fonts.googleapis.com/css2?family=VT323&display=swap');
+        body {
+            margin: 0;
+            overflow: hidden;
+            background-color: #000;
+        }
+        #webgl-container {
+            position: fixed; top: 0; left: 0; width: 100vw; height: 100vh;
+        }
+        #overlay {
+            position: fixed;
+            top: 0; left: 0;
+            width: 100%; height: 100%;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            flex-direction: column;
+            background: rgba(0,0,0, 0.8);
+            color: #ff00ff; /* Base color from oiia.html */
+            font-family: 'VT323', monospace;
+            text-align: center;
+            cursor: pointer;
+            z-index: 10;
+            opacity: 1;
+            transition: opacity 1.5s ease-out;
+        }
+        #overlay.hidden {
+            opacity: 0;
+            pointer-events: none;
+        }
+        #overlay h1 {
+            font-size: 5rem; /* Larger size from oiia.html */
+            text-shadow: 0 0 10px #00ff00, 0 0 20px #ff00ff, 0 0 30px #00ffff;
+            animation: flicker 1.0s infinite alternate; /* Slower flicker for readability but still dynamic */
+        }
+        #overlay p {
+            font-size: 2rem; /* Larger size from oiia.html */
+            margin-top: 1rem;
+            text-shadow: 0 0 5px #00ff00;
+        }
+        @keyframes flicker {
+            0%, 18%, 22%, 25%, 53%, 57%, 100% {
+                /* Combined and intensified text-shadow from both files */
+                text-shadow:
+                0 0 8px #fff,
+                0 0 12px #fff,
+                0 0 22px #00ff00,
+                0 0 40px #ff00ff,
+                0 0 80px #ff00ff,
+                0 0 90px #ff00ff,
+                0 0 100px #00ffff,
+                0 0 150px #ff00ff;
+            }
+            20%, 24%, 55% {        
+                text-shadow: none;
+            }
+        }
+    </style>
+</head>
+<body>
+    <div id="webgl-container"></div>
+    <div id="overlay">
+        <h1>OIIA OIIA</h1>
+        <p>CLICK TO ENGAGE MAXIMUM OVERDRIVE</p>
+    </div>
+    <audio id="bg-music" loop>
+        <source src="audio/oiiacat.mp3" type="audio/mp3">
+    </audio>
+
+    <script type="module">
+        import * as THREE from 'three';
+        import { EffectComposer } from 'three/addons/postprocessing/EffectComposer.js';
+        import { RenderPass } from 'three/addons/postprocessing/RenderPass.js';
+        import { UnrealBloomPass } from 'three/addons/postprocessing/UnrealBloomPass.js';
+        import { FilmPass } from 'three/addons/postprocessing/FilmPass.js';
+        import { ShaderPass } from 'three/addons/postprocessing/ShaderPass.js';
+
+        // Shader for RGB shift effect
+        const RGBShiftShader = {
+            uniforms: {
+                'tDiffuse': { value: null },
+                'amount': { value: 0.005 },
+                'angle': { value: 0.0 }
+            },
+            vertexShader: `
+                varying vec2 vUv;
+                void main() {
+                    vUv = uv;
+                    gl_Position = projectionMatrix * modelViewMatrix * vec4( position, 1.0 );
+                }
+            `,
+            fragmentShader: `
+                uniform sampler2D tDiffuse;
+                uniform float amount;
+                uniform float angle;
+                varying vec2 vUv;
+
+                void main() {
+                    vec2 offset = amount * vec2( cos(angle), sin(angle));
+                    vec4 cr = texture2D(tDiffuse, vUv + offset);
+                    vec4 cg = texture2D(tDiffuse, vUv);
+                    vec4 cb = texture2D(tDiffuse, vUv - offset);
+                    gl_FragColor = vec4(cr.r, cg.g, cb.b, cg.a);
+                }
+            `
+        };
+
+        class CosmicTrip {
+            constructor(container) {
+                this.container = container;
+                this.scene = new THREE.Scene();
+                this.clock = new THREE.Clock();
+                this.butterflies = [];
+
+                this.init();
+                this.createSceneContent();
+                this.animate();
+            }
+
+            init() {
+                // Set up camera
+                this.camera = new THREE.PerspectiveCamera(90, window.innerWidth / window.innerHeight, 0.1, 2000);
+                this.camera.position.set(0, 0, 45);
+
+                // Set up renderer
+                const renderer = new THREE.WebGLRenderer({ antialias: true });
+                renderer.setPixelRatio(window.devicePixelRatio);
+                renderer.setSize(window.innerWidth, window.innerHeight);
+                this.renderer = renderer;
+                this.container.appendChild(this.renderer.domElement);
+                
+                // Add fog and background color
+                this.scene.fog = new THREE.FogExp2(0x000000, 0.02); 
+                this.scene.background = new THREE.Color(0x000000);
+
+                // Set up post-processing for visual effects
+                const renderPass = new RenderPass(this.scene, this.camera);
+                const bloomPass = new UnrealBloomPass(new THREE.Vector2(window.innerWidth, window.innerHeight), 1.5, 0.6, 0.0);
+                const filmPass = new FilmPass(0.9, 0.9, 4096, false);
+                this.rgbShiftPass = new ShaderPass(RGBShiftShader);
+
+                this.composer = new EffectComposer(this.renderer);
+                this.composer.addPass(renderPass);
+                this.composer.addPass(this.rgbShiftPass);
+                this.composer.addPass(bloomPass);
+                this.composer.addPass(filmPass);
+
+                // Handle overlay click to start audio
+                const overlay = document.getElementById('overlay');
+                overlay.addEventListener('click', () => {
+                    overlay.classList.add('hidden');
+                    const audio = document.getElementById('bg-music');
+                    audio.volume = 0.5;
+                    audio.play().catch(e => console.error("Audio playback failed:", e));
+                }, { once: true });
+            }
+
+            createSceneContent() {
+                // --- BIGGER, WEIRDER, MEOWING CAT ---
+                this.catMat = new THREE.MeshBasicMaterial({ color: 0xff00ff, wireframe: true });
+                this.spinningCat = new THREE.Group();
+                
+                // Head with distortion effect
+                this.headGeo = new THREE.SphereGeometry(12, 32, 24);
+                this.originalHeadVertices = new Float32Array(this.headGeo.attributes.position.array.slice());
+                const head = new THREE.Mesh(this.headGeo, this.catMat);
+                this.spinningCat.add(head);
+
+                // Ears
+                const earGeo = new THREE.ConeGeometry(4, 8, 8);
+                const leftEar = new THREE.Mesh(earGeo, this.catMat);
+                leftEar.position.set(-8, 10, 0);
+                leftEar.rotation.z = -Math.PI / 8;
+                this.spinningCat.add(leftEar);
+                
+                const rightEar = new THREE.Mesh(earGeo, this.catMat);
+                rightEar.position.set(8, 10, 0);
+                rightEar.rotation.z = Math.PI / 8;
+                this.spinningCat.add(rightEar);
+
+                // Eyes
+                const eyeGeo = new THREE.SphereGeometry(2, 8, 6);
+                const leftEye = new THREE.Mesh(eyeGeo, this.catMat);
+                leftEye.position.set(-5, 2, 9);
+                this.spinningCat.add(leftEye);
+                
+                const rightEye = new THREE.Mesh(eyeGeo, this.catMat);
+                rightEye.position.set(5, 2, 9);
+                this.spinningCat.add(rightEye);
+
+                // Meowing Mouth
+                const mouthGeo = new THREE.TorusGeometry(2.5, 0.5, 8, 12, Math.PI);
+                this.mouth = new THREE.Mesh(mouthGeo, this.catMat);
+                this.mouth.position.set(0, -4, 9);
+                this.mouth.rotation.x = -Math.PI / 16;
+                this.spinningCat.add(this.mouth);
+
+                // --- CHANGE --- Double the size of the cat by scaling the group
+                this.spinningCat.scale.set(2, 2, 2);
+
+                this.scene.add(this.spinningCat);
+
+                // --- MORE, FASTER, COLOR-SHIFTING BUTTERFLIES ---
+                const colors = [0x00ffff, 0xff00ff, 0x00ff00, 0xffff00];
+                for (let i = 0; i < 200; i++) { 
+                    const butterfly = this.createButterfly(colors[i % colors.length]);
+                     butterfly.position.set(
+                        (Math.random() - 0.5) * 120,
+                        (Math.random() - 0.5) * 120,
+                        (Math.random() - 0.5) * 120
+                    );
+                    this.butterflies.push(butterfly);
+                    this.scene.add(butterfly);
+                }
+            }
+
+            createButterfly(color) {
+                // Creates a single butterfly group with flapping wings
+                const group = new THREE.Group();
+                const wingGeo = new THREE.PlaneGeometry(5, 2.5); 
+                const wingMat = new THREE.MeshBasicMaterial({ color: color, side: THREE.DoubleSide, blending: THREE.AdditiveBlending, transparent: true, opacity: 0.8 });
+                
+                const leftWing = new THREE.Mesh(wingGeo, wingMat);
+                leftWing.position.x = -2.5;
+                leftWing.rotation.y = Math.PI / 4;
+                group.add(leftWing);
+
+                const rightWing = new THREE.Mesh(wingGeo, wingMat);
+                rightWing.position.x = 2.5;
+                rightWing.rotation.y = -Math.PI / 4;
+                group.add(rightWing);
+
+                group.userData = {
+                    leftWing, rightWing, wingMat,
+                    flapSpeed: Math.random() * 15 + 10, 
+                    velocity: new THREE.Vector3(),
+                    noiseOffset: Math.random() * 1000,
+                    colorOffset: Math.random() 
+                };
+                return group;
+            }
+
+            updateScene(delta, elapsed) {
+                // --- MAXIMUM OVERDRIVE ANIMATIONS ---
+                // Cat spinning
+                this.spinningCat.rotation.x += delta * 1.0;
+                this.spinningCat.rotation.y += delta * 1.2;
+                this.spinningCat.rotation.z += delta * 0.8;
+
+                // Head distortion
+                const positions = this.headGeo.attributes.position.array;
+                for (let i = 0; i < positions.length; i += 3) {
+                    const x = this.originalHeadVertices[i];
+                    const y = this.originalHeadVertices[i + 1];
+                    const z = this.originalHeadVertices[i + 2];
+                    const distortion = Math.sin(y * 0.5 + elapsed * 5) * Math.cos(x * 0.5 + elapsed * 3) * 2.0;
+                    positions[i] = x + distortion;
+                    positions[i+1] = y + distortion;
+                }
+                this.headGeo.attributes.position.needsUpdate = true;
+                
+                // Mouth animation
+                this.mouth.scale.y = 0.5 + Math.abs(Math.sin(elapsed * 20)) * 2.5;
+                this.mouth.scale.x = 0.5 + Math.abs(Math.cos(elapsed * 18)) * 1.5;
+
+                // Camera shakes
+                this.camera.position.x = Math.sin(elapsed * 0.2) * 50 + (Math.random() - 0.5) * 4;
+                this.camera.position.z = Math.cos(elapsed * 0.2) * 50 + (Math.random() - 0.5) * 4;
+                this.camera.lookAt(this.scene.position);
+                this.camera.rotation.z += (Math.random() - 0.5) * 0.05;
+
+                // Butterfly updates
+                for (const b of this.butterflies) {
+                    const ud = b.userData;
+                    const flapAngle = Math.sin(elapsed * ud.flapSpeed) * Math.PI / 2.5;
+                    ud.leftWing.rotation.z = flapAngle;
+                    ud.rightWing.rotation.z = -flapAngle;
+                    
+                    // Color shifting
+                    ud.wingMat.color.setHSL((elapsed * 0.5 + ud.colorOffset) % 1, 1.0, 0.5);
+
+                    const toCenter = this.spinningCat.position.clone().sub(b.position).normalize();
+                    const noise = new THREE.Vector3(
+                        Math.sin(elapsed * 2.0 + ud.noiseOffset),
+                        Math.cos(elapsed * 1.8 + ud.noiseOffset),
+                        Math.sin(elapsed * 2.2 + ud.noiseOffset)
+                    ).multiplyScalar(1.5);
+                    
+                    const steer = toCenter.add(noise).normalize();
+                    ud.velocity.add(steer.multiplyScalar(delta * 4));
+                    ud.velocity.clampLength(0, 0.8);
+                    b.position.add(ud.velocity);
+                }
+
+                // --- WILD HALLUCINATION EFFECTS ---
+                // Background flashing
+                const flash = Math.abs(Math.sin(elapsed * Math.PI * 8.0)*Math.random(0, 1)) > 0.9;
+                if (flash) {
+                    this.scene.background.setHSL(Math.random(), 1.0, 0.5);
+                } else {
+                    this.scene.background.set(0x000000);
+                }
+                // Cat color cycling
+                this.catMat.color.setHSL(elapsed * 0.7 % 1, 1.0, 0.5);
+                
+                // RGB shift fluctuations
+                this.rgbShiftPass.uniforms['amount'].value = 0.01 + Math.random() * 0.02;
+                this.rgbShiftPass.uniforms['angle'].value = elapsed * 3.0 + Math.random() * Math.PI;
+            }
+
+            animate() {
+                // Main animation loop
+                requestAnimationFrame(this.animate.bind(this));
+                const delta = this.clock.getDelta();
+                const elapsed = this.clock.getElapsedTime();
+
+                this.updateScene(delta, elapsed);
+                this.composer.render();
+            }
+        }
+        
+        // Initialize the experience when the page loads
+        document.addEventListener('DOMContentLoaded', () => {
+            new CosmicTrip(document.getElementById('webgl-container'));
+        });
+
+    </script>
+</body>
+</html>

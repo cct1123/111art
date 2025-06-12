@@ -1,0 +1,431 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Magnetic Field Simulator - Brilliance Edition (Adaptive)</title>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <link href="https://fonts.googleapis.com/css2?family=Playfair+Display:wght@700&family=Roboto:wght@300;400&display=swap" rel="stylesheet">
+    <style>
+        body { font-family: 'Roboto', sans-serif; overflow: hidden; background: #fdfbfb; color: #1a1a1a; }
+        #scene-container { position: absolute; top: 0; left: 0; width: 100%; height: 100%; z-index: 1; background: radial-gradient(circle, #fff 0%, #e0e0e0 100%); cursor: grab; }
+        #scene-container:active { cursor: grabbing; }
+        
+        /* --- UI Panel (Original Aesthetic) --- */
+        #ui-container { 
+            position: absolute; top: 0; left: 0; width: 380px; height:100%;
+            background: rgba(255, 255, 255, 0.6); backdrop-filter: blur(20px) saturate(180%); -webkit-backdrop-filter: blur(20px) saturate(180%); 
+            border-right: 1px solid rgba(0, 0, 0, 0.1); 
+            padding: 30px; z-index: 10; box-shadow: 0 10px 40px rgba(0, 0, 0, 0.1);
+            transform: translateX(-100%);
+            transition: transform 0.4s cubic-bezier(0.4, 0, 0.2, 1);
+            display: flex;
+            flex-direction: column;
+        }
+        #ui-container.open { transform: translateX(0); }
+
+        /* --- Menu Toggle Button (Original Aesthetic) --- */
+        #menu-toggle {
+            position: absolute; top: 20px; left: 20px; z-index: 11;
+            background: rgba(255, 255, 255, 0.7);
+            border: 1px solid rgba(0,0,0,0.1);
+            backdrop-filter: blur(10px);
+            border-radius: 50%; width: 50px; height: 50px;
+            cursor: pointer; display: flex; align-items: center; justify-content: center;
+            box-shadow: 0 4px 15px rgba(0,0,0,0.1);
+            transition: all 0.3s ease;
+        }
+        #menu-toggle:hover { transform: scale(1.1); }
+        .icon-bar { background-color: #333; height: 2px; width: 22px; margin: 3px 0; transition: transform 0.3s ease; }
+        #menu-toggle.open .icon-bar:nth-child(1) { transform: translateY(5px) rotate(45deg); }
+        #menu-toggle.open .icon-bar:nth-child(2) { opacity: 0; }
+        #menu-toggle.open .icon-bar:nth-child(3) { transform: translateY(-5px) rotate(-45deg); }
+
+        /* --- Loading Spinner --- */
+        #loader {
+            position: absolute;
+            top: 50%; left: 50%;
+            transform: translate(-50%, -50%);
+            border: 5px solid #e0e0e0;
+            border-top: 5px solid #333;
+            border-radius: 50%;
+            width: 50px; height: 50px;
+            animation: spin 1s linear infinite;
+            z-index: 100;
+            display: none;
+        }
+        #loader.visible { display: block; }
+        @keyframes spin { 0% { transform: rotate(0deg); } 100% { transform: rotate(360deg); } }
+        
+        /* --- UI Content Styling (Original Aesthetic) --- */
+        #title { font-family: 'Playfair Display', serif; font-size: 2.5rem; text-align: center; margin-bottom: 25px; color: #333; }
+        .control-group { margin-bottom: 25px; }
+        .control-group h3 { font-size: 1rem; font-weight: 400; text-transform: uppercase; letter-spacing: 1.5px; margin-bottom: 15px; color: #555; border-bottom: 1px solid #ddd; padding-bottom: 8px; }
+        .button { background: #1a1a1a; color: #fff; font-weight: 400; text-transform: uppercase; letter-spacing: 1px; padding: 14px 20px; border: none; border-radius: 10px; cursor: pointer; width: 100%; margin-top: 10px; transition: all 0.3s ease; }
+        .button:hover { background: #333; transform: translateY(-2px); box-shadow: 0 5px 15px rgba(0,0,0,0.1); }
+        select, input[type="range"] {
+             background-color: rgba(255, 255, 255, 0.8); border: 1px solid #ccc; border-radius: 10px; padding: 10px;
+             width: 100%;
+        }
+        .wire-item { background-color: rgba(255, 255, 255, 0.5); border-radius: 10px; padding: 12px 15px; margin-bottom: 10px; display: flex; justify-content: space-between; align-items: center; border: 1px solid #eee; cursor: pointer; }
+        .wire-item.selected { border-color: #333; background-color: rgba(220, 220, 220, 0.8); }
+        .remove-btn { background-color: #e53e3e; color: white; padding: 5px 9px; border: none; border-radius: 50%; cursor: pointer; font-size: 0.9rem; line-height: 1; font-weight: bold; transition: background-color 0.2s; }
+        .remove-btn:hover { background-color: #c53030; }
+        #wire-list-container { flex-grow: 1; overflow-y: auto; margin-top: 20px; }
+        #properties-panel { padding: 15px; background-color: rgba(0,0,0,0.03); border-radius: 10px; min-height: 100px; }
+    </style>
+</head>
+<body>
+    <div id="scene-container"></div>
+    <div id="loader"></div>
+    <div id="menu-toggle">
+        <div class="icon-bar"></div><div class="icon-bar"></div><div class="icon-bar"></div>
+    </div>
+    
+    <div id="ui-container">
+        <h2 id="title">Brilliance</h2>
+        <div>
+            <div class="control-group">
+                <h3>Add Element</h3>
+                <select id="wire-type">
+                    <option value="loop">Golden Loop</option>
+                    <option value="straight">Platinum Wire</option>
+                    <option value="solenoid">Solenoid Coil</option>
+                    <option value="rectangular">Rectangular Loop</option>
+                </select>
+                <button id="add-wire" class="button">Add to Composition</button>
+            </div>
+
+            <div class="control-group">
+                <h3>Visualization Style</h3>
+                <div>
+                    <label for="field-density">Point Density</label>
+                    <input type="range" id="field-density" min="5000" max="50000" value="7000" step="1000">
+                </div>
+                 <div>
+                    <label for="field-scale" class="mt-4 block">Field Intensity</label>
+                    <input type="range" id="field-scale" min="0.1" max="5" value="1.5" step="0.1">
+                </div>
+                <button id="clear-scene" class="button" style="background: #555;">Clear Scene</button>
+            </div>
+             <div class="control-group">
+                <h3>Element Properties</h3>
+                <div id="properties-panel">
+                    <p>Select an element to edit.</p>
+                </div>
+            </div>
+        </div>
+        
+        <div id="wire-list-container">
+             <h3>Scene Elements</h3>
+            <div id="wire-list"></div>
+        </div>
+    </div>
+
+    <script type="module">
+        // --- Core Three.js Setup ---
+        const scene = new THREE.Scene();
+        const camera = new THREE.PerspectiveCamera(60, window.innerWidth / window.innerHeight, 0.1, 2000);
+        const renderer = new THREE.WebGLRenderer({ antialias: true, alpha: true });
+        camera.position.set(0, 15, 40);
+        camera.lookAt(0, 0, 0);
+        renderer.setSize(window.innerWidth, window.innerHeight);
+        renderer.setPixelRatio(window.devicePixelRatio);
+        renderer.shadowMap.enabled = true;
+        document.getElementById('scene-container').appendChild(renderer.domElement);
+
+        // --- Lighting & Environment ---
+        scene.add(new THREE.AmbientLight(0xffffff, 0.7));
+        const keyLight = new THREE.DirectionalLight(0xffffff, 0.8);
+        keyLight.position.set(-20, 25, 15);
+        keyLight.castShadow = true;
+        scene.add(keyLight);
+        const ground = new THREE.Mesh(new THREE.PlaneGeometry(100, 100), new THREE.ShadowMaterial({ opacity: 0.2 }));
+        ground.rotation.x = -Math.PI / 2;
+        ground.position.y = -12;
+        ground.receiveShadow = true;
+        scene.add(ground);
+        
+        // --- Global State & Materials ---
+        const goldMaterial = new THREE.MeshStandardMaterial({ color: 0xffd700, metalness: 0.9, roughness: 0.2, side: THREE.DoubleSide });
+        const platinumMaterial = new THREE.MeshStandardMaterial({ color: 0xe5e4e2, metalness: 0.95, roughness: 0.15, side: THREE.DoubleSide });
+        let wires = [], fieldVectorObjects = [], cachedFieldData = null, isSimulating = false, selectedWireId = null;
+
+        // --- Physics Worker Setup ---
+        const biotSavartWorker = new Worker(URL.createObjectURL(new Blob([`(${getWorkerFunction.toString()})()`], { type: 'application/javascript' })));
+        biotSavartWorker.onmessage = e => {
+            cachedFieldData = e.data;
+            renderFromCache();
+            isSimulating = false;
+            document.getElementById('loader').classList.remove('visible');
+        };
+
+        // --- Simulation & Rendering ---
+        function startFullSimulation() {
+            if (isSimulating) return;
+            isSimulating = true;
+            document.getElementById('loader').classList.add('visible');
+
+            if (wires.length === 0) {
+                renderFromCache(true);
+                isSimulating = false;
+                document.getElementById('loader').classList.remove('visible');
+                return;
+            }
+            const frustum = new THREE.Frustum().setFromProjectionMatrix(new THREE.Matrix4().multiplyMatrices(camera.projectionMatrix, camera.matrixWorldInverse));
+            const workerWires = wires.map(wire => ({ type: wire.type, ...wire.params }));
+            biotSavartWorker.postMessage({ 
+                wires: workerWires, 
+                pointCount: parseInt(document.getElementById('field-density').value), 
+                scale: parseFloat(document.getElementById('field-scale').value),
+                frustumPlanes: frustum.planes.map(p => [p.normal.x, p.normal.y, p.normal.z, p.constant])
+            });
+        }
+        
+        function renderFromCache(clear = false) {
+             fieldVectorObjects.forEach(v => scene.remove(v));
+             fieldVectorObjects = [];
+             if (clear || !cachedFieldData || !cachedFieldData.points) return;
+             for (let i = 0; i < cachedFieldData.points.length; i++) {
+                const origin = new THREE.Vector3().fromArray(cachedFieldData.points[i]);
+                const dir = new THREE.Vector3().fromArray(cachedFieldData.directions[i]);
+                const color = new THREE.Color().fromArray(cachedFieldData.colors[i]);
+                const arrow = new THREE.ArrowHelper(dir, origin, 1.5, color, 0.3, 0.2);
+                arrow.line.material = new THREE.LineBasicMaterial({ color, transparent: true, opacity: 0.8, blending: THREE.AdditiveBlending });
+                arrow.cone.material = new THREE.MeshBasicMaterial({ color, transparent: true, opacity: 0.8, blending: THREE.AdditiveBlending });
+                scene.add(arrow);
+                fieldVectorObjects.push(arrow);
+            }
+        }
+        
+        // --- Wire Management ---
+        function createAndAddWire(type) {
+            const wire = { id: Date.now(), type, mesh: null, params: {} };
+            switch (type) {
+                case 'loop': wire.params = { R: 8 }; break;
+                case 'straight': wire.params = { length: 50 }; break;
+                case 'solenoid': wire.params = { R: 4, L: 12, T: 20 }; break;
+                case 'rectangular': wire.params = { w: 14, h: 10 }; break;
+            }
+            wire.mesh = createWireMesh(wire);
+            wire.mesh.castShadow = true;
+            scene.add(wire.mesh);
+            wires.push(wire);
+            selectWire(wire.id);
+            startFullSimulation();
+        }
+
+        function createWireMesh(wire) {
+            let geometry; const thickness = 0.25;
+            switch (wire.type) {
+                case 'loop': geometry = new THREE.TorusGeometry(wire.params.R, thickness, 24, 120); break;
+                case 'straight': geometry = new THREE.CylinderGeometry(thickness, thickness, wire.params.length, 32); geometry.rotateZ(Math.PI / 2); break;
+                case 'solenoid':
+                    const points = Array.from({length: 200}, (_, i) => {
+                        const t = i / 199, angle = t * Math.PI * 2 * wire.params.T;
+                        return new THREE.Vector3(Math.cos(angle) * wire.params.R, Math.sin(angle) * wire.params.R, (t - 0.5) * wire.params.L);
+                    });
+                    geometry = new THREE.TubeGeometry(new THREE.CatmullRomCurve3(points), 200, thickness, 8, false);
+                    break;
+                case 'rectangular':
+                    const { w, h } = wire.params, halfW = w/2, halfH = h/2;
+                    const path = new THREE.CurvePath();
+                    path.add(new THREE.LineCurve3(new THREE.Vector3(-halfW, -halfH, 0), new THREE.Vector3(halfW, -halfH, 0)));
+                    path.add(new THREE.LineCurve3(new THREE.Vector3(halfW, -halfH, 0), new THREE.Vector3(halfW, halfH, 0)));
+                    path.add(new THREE.LineCurve3(new THREE.Vector3(halfW, halfH, 0), new THREE.Vector3(-halfW, halfH, 0)));
+                    path.add(new THREE.LineCurve3(new THREE.Vector3(-halfW, halfH, 0), new THREE.Vector3(-halfW, -halfH, 0)));
+                    geometry = new THREE.TubeGeometry(path, 64, thickness, 8, true);
+                    break;
+            }
+            const material = (wire.type === 'straight' || wire.type === 'rectangular') ? platinumMaterial : goldMaterial;
+            return new THREE.Mesh(geometry, material);
+        }
+
+        function updateWireMesh(wireId) {
+            const wire = wires.find(w => w.id === wireId);
+            if (!wire) return;
+            scene.remove(wire.mesh);
+            wire.mesh.geometry.dispose();
+            wire.mesh = createWireMesh(wire);
+            wire.mesh.castShadow = true;
+            scene.add(wire.mesh);
+        }
+        
+        // --- UI Management ---
+        function selectWire(id) { selectedWireId = id; updateWireListUI(); updatePropertiesPanel(); }
+        function updateWireListUI() {
+            const list = document.getElementById('wire-list');
+            list.innerHTML = '';
+            wires.forEach(wire => {
+                const item = document.createElement('div');
+                item.className = `wire-item ${wire.id === selectedWireId ? 'selected' : ''}`;
+                item.onclick = () => selectWire(wire.id);
+                const name = wire.type.charAt(0).toUpperCase() + wire.type.slice(1);
+                item.innerHTML = `<span>${name}</span><button class="remove-btn" data-id="${wire.id}">×</button>`;
+                list.appendChild(item);
+            });
+            list.querySelectorAll('.remove-btn').forEach(btn => btn.onclick = e => {
+                e.stopPropagation();
+                const id = parseInt(btn.dataset.id);
+                scene.remove(wires.find(w=>w.id===id).mesh);
+                wires = wires.filter(w => w.id !== id);
+                if (selectedWireId === id) { selectedWireId = null; updatePropertiesPanel(); }
+                updateWireListUI();
+                startFullSimulation();
+            });
+        }
+        
+        function updatePropertiesPanel() {
+            const panel = document.getElementById('properties-panel');
+            const wire = wires.find(w => w.id === selectedWireId);
+            if (!wire) { panel.innerHTML = `<p>Select an element to edit.</p>`; return; }
+            let content = '';
+            for (const [key, value] of Object.entries(wire.params)) {
+                if (key === 'length') continue; // Do not show visual length slider
+                let max = 100, step = 0.1;
+                if (key === 'R') max = 20; if (key === 'L') max = 30; if (key === 'T') { max = 50; step = 1; } if (key === 'w' || key === 'h') max = 30;
+                content += `<div><label for="prop-${key}">${key}</label><input type="range" class="prop-slider" id="prop-${key}" data-key="${key}" min="0.5" max="${max}" value="${value}" step="${step}"></div>`;
+            }
+            panel.innerHTML = content;
+            panel.querySelectorAll('.prop-slider').forEach(slider => {
+                slider.addEventListener('input', e => { wires.find(w=>w.id===selectedWireId).params[e.target.dataset.key] = parseFloat(e.target.value); updateWireMesh(selectedWireId); });
+                slider.addEventListener('change', startFullSimulation);
+            });
+        }
+
+        // --- Event Listeners & Animation ---
+        document.getElementById('menu-toggle').addEventListener('click', () => { document.getElementById('ui-container').classList.toggle('open'); document.getElementById('menu-toggle').classList.toggle('open'); });
+        document.getElementById('add-wire').addEventListener('click', () => createAndAddWire(document.getElementById('wire-type').value));
+        ['field-density', 'field-scale'].forEach(id => document.getElementById(id).addEventListener('change', startFullSimulation));
+        document.getElementById('clear-scene').addEventListener('click', () => { wires.forEach(w => scene.remove(w.mesh)); wires = []; selectedWireId = null; updateWireListUI(); updatePropertiesPanel(); startFullSimulation(); });
+        
+        let dragMode=null, prevMouse={x:0,y:0}, rotSpeed=0.004, panSpeed=0.1;
+        renderer.domElement.addEventListener('contextmenu', e=>e.preventDefault());
+        renderer.domElement.addEventListener('mousedown', e => { dragMode = e.button === 0 ? 'rotate' : 'pan'; prevMouse.x = e.clientX; prevMouse.y = e.clientY; });
+        renderer.domElement.addEventListener('mouseup', () => dragMode=null);
+        renderer.domElement.addEventListener('mousemove', e => {
+            if(!dragMode) return;
+            const deltaX = e.clientX-prevMouse.x, deltaY = e.clientY-prevMouse.y;
+            if(dragMode === 'rotate') { scene.rotation.y += deltaX*rotSpeed; scene.rotation.x += deltaY*rotSpeed; }
+            else if(dragMode === 'pan') { const panVec = new THREE.Vector3(-deltaX*panSpeed, deltaY*panSpeed, 0).applyQuaternion(camera.quaternion); camera.position.add(panVec); }
+            prevMouse.x=e.clientX; prevMouse.y=e.clientY;
+        });
+        renderer.domElement.addEventListener('wheel', e => { camera.position.z = Math.max(10, Math.min(camera.position.z + e.deltaY * 0.02, 100)); });
+        window.addEventListener('resize', () => { camera.aspect=window.innerWidth/window.innerHeight; camera.updateProjectionMatrix(); renderer.setSize(window.innerWidth, window.innerHeight); });
+        
+        function animate() { requestAnimationFrame(animate); renderer.render(scene, camera); }
+        createAndAddWire('loop');
+        animate();
+
+        // --- Physics Worker Function (with Adaptive Meshing and Reduced Singularity) ---
+        function getWorkerFunction() {
+            // This self-contained function will be stringified and used for the worker.
+            function viridisColor(t){t=Math.max(0,Math.min(1,t));const c=[[0.267,0.005,0.329],[0.282,0.134,0.457],[0.254,0.265,0.53],[0.19,0.399,0.558],[0.128,0.528,0.545],[0.134,0.65,0.505],[0.261,0.759,0.424],[0.477,0.838,0.296],[0.741,0.873,0.147],[0.993,0.906,0.144]];const i=Math.floor(t*(c.length-1)),f=t*(c.length-1)-i;if(f===0)return c[i];const c1=c[i],c2=c[i+1];return[c1[0]+(c2[0]-c1[0])*f,c1[1]+(c2[1]-c1[1])*f,c1[2]+(c2[2]-c1[2])*f]}
+            function isPointInFrustum(p,planes){for(let i=0;i<6;i++){if(p.x*planes[i][0]+p.y*planes[i][1]+p.z*planes[i][2]+planes[i][3]<-0.5)return false}return true}
+            
+            const mu0=4*Math.PI*1e-7,current=5;
+            function getB_Straight(p,B){const r_sq=p.x*p.x+p.y*p.y;if(r_sq<1e-6)return;const r=Math.sqrt(r_sq),B_mag=mu0*current/(2*Math.PI*r);B.x-=B_mag*p.y/r;B.y+=B_mag*p.x/r}
+            function getB_Loop(p,B,R){const r_sq=p.x*p.x+p.y*p.y+p.z*p.z;if(r_sq<1e-6)return;const r=Math.sqrt(r_sq);if(r>R*4){const A=Math.PI*R*R,m_mag=current*A,r_norm5=Math.pow(r,5),p_dot_m=p.z*m_mag,factor=mu0/(4*Math.PI*r_norm5);B.x+=factor*3*p.x*p_dot_m;B.y+=factor*3*p.y*p_dot_m;B.z+=factor*(3*p.z*p_dot_m-m_mag*r_sq);return}const rho_sq=p.x*p.x+p.y*p.y;if(rho_sq<0.1){const R_sq=R*R,factor=Math.pow(R_sq+p.z*p.z,1.5);B.z+=mu0*current*R_sq/(2*factor);return}const N=50;for(let j=0;j<N;j++){const th=j*2*Math.PI/N,d_th=2*Math.PI/N,dl={x:-R*Math.sin(th)*d_th,y:R*Math.cos(th)*d_th,z:0},wp={x:R*Math.cos(th),y:R*Math.sin(th),z:0},rv={x:p.x-wp.x,y:p.y-wp.y,z:p.z},rm_sq=rv.x**2+rv.y**2+rv.z**2;if(rm_sq>1e-6){const rm_inv3=Math.pow(rm_sq,-1.5),cp={x:dl.y*rv.z-dl.z*rv.y,y:dl.z*rv.x-dl.x*rv.z,z:dl.x*rv.y-dl.y*rv.x},f=mu0*current/(4*Math.PI);B.x+=f*cp.x*rm_inv3;B.y+=f*cp.y*rm_inv3;B.z+=f*cp.z*rm_inv3}}}
+            function getB_Solenoid(p,B,R,L,T){const n=T/L,z_plus=p.z+L/2,z_minus=p.z-L/2,cos_alpha1=z_plus/Math.sqrt(R*R+z_plus*z_plus),cos_alpha2=z_minus/Math.sqrt(R*R+z_minus*z_minus);B.z+=(mu0*n*current/2)*(cos_alpha2-cos_alpha1)}
+            function getB_FiniteWire(p,B,p1,p2){const r1_vec={x:p.x-p1.x,y:p.y-p1.y,z:p.z-p1.z},r2_vec={x:p.x-p2.x,y:p.y-p2.y,z:p.z-p2.z},L_vec={x:p2.x-p1.x,y:p2.y-p1.y,z:p2.z-p1.z},r1_mag=Math.sqrt(r1_vec.x**2+r1_vec.y**2+r1_vec.z**2),r2_mag=Math.sqrt(r2_vec.x**2+r2_vec.y**2+r2_vec.z**2);if(r1_mag<1e-4||r2_mag<1e-4)return;const L_cross_r1={x:L_vec.y*r1_vec.z-L_vec.z*r1_vec.y,y:L_vec.z*r1_vec.x-L_vec.x*r1_vec.z,z:L_vec.x*r1_vec.y-L_vec.y*r1_vec.x},L_cross_r1_mag_sq=L_cross_r1.x**2+L_cross_r1.y**2+L_cross_r1.z**2;if(L_cross_r1_mag_sq<1e-6)return;const L_mag=Math.sqrt(L_vec.x**2+L_vec.y**2+L_vec.z**2),cos_th1=(r1_vec.x*L_vec.x+r1_vec.y*L_vec.y+r1_vec.z*L_vec.z)/(r1_mag*L_mag),cos_th2=(-r2_vec.x*L_vec.x-r2_vec.y*L_vec.y-r2_vec.z*L_vec.z)/(r2_mag*L_mag),B_mag_factor=mu0*current/(4*Math.PI*Math.sqrt(L_cross_r1_mag_sq)/L_mag)*(cos_th1+cos_th2),B_dir={x:L_cross_r1.x/Math.sqrt(L_cross_r1_mag_sq),y:L_cross_r1.y/Math.sqrt(L_cross_r1_mag_sq),z:L_cross_r1.z/Math.sqrt(L_cross_r1_mag_sq)};B.x+=B_mag_factor*B_dir.x;B.y+=B_mag_factor*B_dir.y;B.z+=B_mag_factor*B_dir.z}
+            function getB_Rectangular(p,B,w,h){const hw=w/2,hh=h/2,p1={x:-hw,y:-hh,z:0},p2={x:hw,y:-hh,z:0},p3={x:hw,y:hh,z:0},p4={x:-hw,y:hh,z:0};getB_FiniteWire(p,B,p1,p2);getB_FiniteWire(p,B,p2,p3);getB_FiniteWire(p,B,p3,p4);getB_FiniteWire(p,B,p4,p1)}
+            
+            function calculateB(p, wires) {
+                let total_B = {x:0, y:0, z:0};
+                for (const wire of wires) {
+                    switch(wire.type) {
+                        case "straight": getB_Straight(p, total_B); break;
+                        case "loop": getB_Loop(p, total_B, wire.R); break;
+                        case "solenoid": getB_Solenoid(p, total_B, wire.R, wire.L, wire.T); break;
+                        case "rectangular": getB_Rectangular(p, total_B, wire.w, wire.h); break;
+                    }
+                }
+                return total_B;
+            }
+
+            self.onmessage=e=>{
+                const{wires,pointCount,scale,frustumPlanes}=e.data;
+                if(wires.length===0){self.postMessage({points:[],directions:[],colors:[]});return}
+                
+                const points=[],directions=[],magnitudes=[];
+                let maxMag=0;
+                const searchRadius = 60; 
+                const importanceSamplingRatio = 0.7; // 70% of points are focused near wires
+                const gradientCheckStep = 0.1;
+
+                let pointsGenerated = 0;
+                while(pointsGenerated < pointCount) {
+                    let p;
+                    const isImportanceSample = Math.random() < importanceSamplingRatio && wires.length > 0;
+
+                    if (isImportanceSample) {
+                        const wire = wires[Math.floor(Math.random() * wires.length)];
+                        let focusRadius = 5;
+                        if(wire.type === 'loop' || wire.type === 'solenoid') focusRadius = wire.R * 2;
+                        if(wire.type === 'rectangular') focusRadius = Math.max(wire.w, wire.h);
+
+                        p = {
+                            x: (Math.random() - 0.5) * focusRadius * 2,
+                            y: (Math.random() - 0.5) * focusRadius * 2,
+                            z: (Math.random() - 0.5) * focusRadius * 2
+                        };
+
+                    } else {
+                        p = {
+                           x: (Math.random()-.5) * searchRadius * 2,
+                           y: (Math.random()-.5) * searchRadius * 2,
+                           z: (Math.random()-.5) * searchRadius * 2
+                        };
+                    }
+
+                    if (!isPointInFrustum(p, frustumPlanes)) continue;
+                    
+                    const B = calculateB(p, wires);
+                    const b_mag = Math.sqrt(B.x**2+B.y**2+B.z**2);
+
+                    if (b_mag > 1e-10) {
+                        points.push([p.x,p.y,p.z]);
+                        directions.push([B.x/b_mag,B.y/b_mag,B.z/b_mag]);
+                        magnitudes.push(b_mag);
+                        if (b_mag > maxMag) maxMag = b_mag;
+                        pointsGenerated++;
+
+                        // Gradient-based check: if field is strong, add more points nearby
+                        if (b_mag > maxMag * 0.1) {
+                           const B_offset = calculateB({x: p.x + gradientCheckStep, y: p.y, z: p.z}, wires);
+                           const grad_mag = Math.sqrt((B.x-B_offset.x)**2 + (B.y-B_offset.y)**2 + (B.z-B_offset.z)**2);
+
+                           // If gradient is high, add another point nearby with high probability
+                           if(grad_mag > 1e-6 && Math.random() < 0.5 && pointsGenerated < pointCount) {
+                                const p2 = { x: p.x + (Math.random() - 0.5) * 2, y: p.y + (Math.random() - 0.5) * 2, z: p.z + (Math.random() - 0.5) * 2 };
+                                if(isPointInFrustum(p2, frustumPlanes)) {
+                                     const B2 = calculateB(p2, wires);
+                                     const b2_mag = Math.sqrt(B2.x**2+B2.y**2+B2.z**2);
+                                     if(b2_mag > 1e-10) {
+                                        points.push([p2.x, p2.y, p2.z]);
+                                        directions.push([B2.x/b2_mag, B2.y/b2_mag, B2.z/b2_mag]);
+                                        magnitudes.push(b2_mag);
+                                        if (b2_mag > maxMag) maxMag = b2_mag;
+                                        pointsGenerated++;
+                                     }
+                                }
+                           }
+                        }
+                    }
+                }
+
+                const colors = [];
+                const logMaxMag = Math.log1p(maxMag * scale * 1e6);
+                if (logMaxMag > 0) {
+                    magnitudes.forEach(mag => {
+                        const normMag = Math.log1p(mag * scale * 1e6) / logMaxMag;
+                        colors.push(viridisColor(1 - normMag));
+                    });
+                }
+                self.postMessage({points,directions,colors});
+            }
+        }
+    </script>
+</body>
+</html>

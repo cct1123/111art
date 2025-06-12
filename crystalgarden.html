@@ -1,0 +1,392 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>The Crystal Garden</title>
+    <style>
+        body { 
+            margin: 0; 
+            overflow: hidden; 
+            background-color: #0d0514; /* Deep purple night */
+            color: #fff;
+            font-family: 'Garamond', 'Times New Roman', serif;
+        }
+        canvas { 
+            display: block; 
+        }
+        .overlay {
+            position: absolute;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            display: flex;
+            flex-direction: column;
+            justify-content: center;
+            align-items: center;
+            text-align: center;
+            pointer-events: none;
+            text-shadow: 0 0 15px rgba(255, 200, 255, 0.8);
+        }
+        .title {
+            font-size: 4em;
+            letter-spacing: 0.15em;
+            animation: fadeInGlow 4s ease-in-out forwards;
+        }
+        .instructions {
+            font-size: 1.2em;
+            color: #d1c4e9;
+            margin-top: 1em;
+            animation: fadeInGlow 4s ease-in-out 1s forwards;
+            opacity: 0;
+        }
+        @keyframes fadeInGlow {
+            from { opacity: 0; text-shadow: 0 0 5px rgba(255, 200, 255, 0.2); }
+            to { opacity: 1; text-shadow: 0 0 15px rgba(255, 200, 255, 0.8); }
+        }
+    </style>
+</head>
+<body>
+    <div class="overlay">
+        <div class="title">The Crystal Garden</div>
+        <div class="instructions">Drag to explore the sanctuary</div>
+    </div>
+
+    <script type="importmap">
+        {
+            "imports": {
+                "three": "https://cdn.jsdelivr.net/npm/three@0.165.0/build/three.module.js",
+                "three/addons/": "https://cdn.jsdelivr.net/npm/three@0.165.0/examples/jsm/"
+            }
+        }
+    </script>
+
+    <script type="module">
+        import * as THREE from 'three';
+        import { OrbitControls } from 'three/addons/controls/OrbitControls.js';
+
+        // --- Simplex Noise For Natural Movement ---
+        var SimplexNoise = (function() {
+            'use strict';
+            var F2 = 0.5 * (Math.sqrt(3.0) - 1.0), G2 = (3.0 - Math.sqrt(3.0)) / 6.0;
+            var grad3 = new Float32Array([1, 1, 0, -1, 1, 0, 1, -1, 0, -1, -1, 0, 1, 0, 1, -1, 0, 1, 1, 0, -1, -1, 0, -1, 0, 1, 1, 0, -1, 1, 0, 1, -1, 0, -1, -1]);
+            function SimplexNoise(random) {
+                if (!random) random = Math.random;
+                this.p = new Uint8Array(256);
+                this.perm = new Uint8Array(512);
+                this.permMod12 = new Uint8Array(512);
+                for (var i = 0; i < 256; i++) { this.p[i] = random() * 256; }
+                for (i = 0; i < 512; i++) {
+                    this.perm[i] = this.p[i & 255];
+                    this.permMod12[i] = this.perm[i] % 12;
+                }
+            }
+            SimplexNoise.prototype = {
+                noise2D: function(xin, yin) {
+                    var n0 = 0, n1 = 0, n2 = 0;
+                    var s = (xin + yin) * F2;
+                    var i = Math.floor(xin + s), j = Math.floor(yin + s);
+                    var t = (i + j) * G2;
+                    var x0 = xin - (i - t), y0 = yin - (j - t);
+                    var i1 = (x0 > y0) ? 1 : 0, j1 = (x0 > y0) ? 0 : 1;
+                    var x1 = x0 - i1 + G2, y1 = y0 - j1 + G2;
+                    var x2 = x0 - 1.0 + 2.0 * G2, y2 = y0 - 1.0 + 2.0 * G2;
+                    var ii = i & 255, jj = j & 255;
+                    var gi0 = this.permMod12[ii + this.perm[jj]];
+                    var gi1 = this.permMod12[ii + i1 + this.perm[jj + j1]];
+                    var gi2 = this.permMod12[ii + 1 + this.perm[jj + 1]];
+                    var t0 = 0.5 - x0 * x0 - y0 * y0;
+                    if (t0 < 0) n0 = 0.0;
+                    else { t0 *= t0; n0 = t0 * t0 * (grad3[gi0 * 3] * x0 + grad3[gi0 * 3 + 1] * y0); }
+                    var t1 = 0.5 - x1 * x1 - y1 * y1;
+                    if (t1 < 0) n1 = 0.0;
+                    else { t1 *= t1; n1 = t1 * t1 * (grad3[gi1 * 3] * x1 + grad3[gi1 * 3 + 1] * y1); }
+                    var t2 = 0.5 - x2 * x2 - y2 * y2;
+                    if (t2 < 0) n2 = 0.0;
+                    else { t2 *= t2; n2 = t2 * t2 * (grad3[gi2 * 3] * x2 + grad3[gi2 * 3 + 1] * y2); }
+                    return 70.0 * (n0 + n1 + n2);
+                }
+            };
+            return SimplexNoise;
+        })();
+
+        // --- Shaders ---
+        const vertexShader = `
+            varying vec2 vUv;
+            varying vec3 vNormal;
+            void main() {
+                vUv = uv;
+                vNormal = normalize(normalMatrix * normal);
+                gl_Position = projectionMatrix * modelViewMatrix * vec4(position, 1.0);
+            }
+        `;
+
+        const fragmentShader = `
+            varying vec2 vUv;
+            varying vec3 vNormal;
+            uniform float uTime;
+            uniform vec3 uColor1;
+            uniform vec3 uColor2;
+            
+            // Fresnel function for edge glow
+            float fresnel(vec3 viewDirection, vec3 worldNormal) {
+                return pow(1.0 - dot(viewDirection, worldNormal), 3.0);
+            }
+
+            void main() {
+                // Iridescence based on view angle
+                vec3 viewDirection = normalize(vNormal);
+                float iridescence = dot(viewDirection, vec3(0.5, 0.5, 0.5));
+                vec3 baseColor = mix(uColor1, uColor2, iridescence);
+
+                // Animated noise pattern on wings
+                float noise = (sin(vUv.y * 20.0 + uTime * 2.0) + sin(vUv.x * 10.0 + uTime * 1.5)) * 0.1;
+                vec3 finalColor = baseColor + noise;
+
+                // Edge glow
+                float fresnelFactor = fresnel(viewDirection, vNormal);
+                finalColor += fresnelFactor * uColor1 * 2.0;
+                
+                gl_FragColor = vec4(finalColor, 0.9);
+            }
+        `;
+
+        // --- Scene Setup ---
+        let scene, camera, renderer, clock, controls;
+        const butterflies = [];
+        const butterflyCount = 12;
+        const noise = new SimplexNoise();
+
+        function init() {
+            scene = new THREE.Scene();
+            scene.fog = new THREE.Fog(0x0d0514, 40, 150);
+
+            camera = new THREE.PerspectiveCamera(75, window.innerWidth / window.innerHeight, 0.1, 1000);
+            camera.position.set(0, 5, 40);
+
+            renderer = new THREE.WebGLRenderer({ antialias: true, powerPreference: "high-performance" });
+            renderer.setSize(window.innerWidth, window.innerHeight);
+            renderer.setPixelRatio(window.devicePixelRatio);
+            renderer.toneMapping = THREE.ACESFilmicToneMapping;
+            renderer.toneMappingExposure = 1.0;
+            document.body.appendChild(renderer.domElement);
+
+            clock = new THREE.Clock();
+            controls = new OrbitControls(camera, renderer.domElement);
+            controls.enableDamping = true;
+            controls.enableZoom = false;
+            controls.enablePan = false;
+            controls.minPolarAngle = Math.PI / 3;
+            controls.maxPolarAngle = Math.PI / 1.5;
+
+            // --- Lighting ---
+            const hemisphereLight = new THREE.HemisphereLight(0x8a2be2, 0x0000ff, 0.8);
+            scene.add(hemisphereLight);
+
+            const moonLight = new THREE.DirectionalLight(0xb19cd9, 0.6);
+            moonLight.position.set(20, 30, -20);
+            scene.add(moonLight);
+
+            // --- Environment ---
+            createCrystals();
+            createMagicalParticles();
+
+            // --- Create Butterflies ---
+            for (let i = 0; i < butterflyCount; i++) {
+                butterflies.push(createButterfly());
+            }
+
+            window.addEventListener('resize', onWindowResize);
+            animate();
+        }
+
+        // --- Butterfly Creation ---
+        function createButterfly() {
+            const butterfly = new THREE.Group();
+            
+            const wingMaterial = new THREE.ShaderMaterial({
+                vertexShader,
+                fragmentShader,
+                uniforms: {
+                    uTime: { value: 0 },
+                    uColor1: { value: new THREE.Color().setHSL(0.55 + Math.random() * 0.1, 0.9, 0.6) },
+                    uColor2: { value: new THREE.Color().setHSL(0.75 + Math.random() * 0.1, 0.9, 0.6) },
+                },
+                transparent: true,
+                side: THREE.DoubleSide,
+                depthWrite: false,
+                blending: THREE.AdditiveBlending
+            });
+            
+            // Elegant wing geometry
+            const extrudeSettings = { depth: 0.05, bevelEnabled: false };
+            const wingShape = new THREE.Shape();
+            wingShape.moveTo(0, 0);
+            wingShape.bezierCurveTo(3, 2, 4.5, 4.5, 3.0, 6.0);
+            wingShape.bezierCurveTo(1.5, 4.5, 0.5, 2.0, 0, 0);
+            const wingGeom = new THREE.ExtrudeGeometry(wingShape, extrudeSettings);
+
+            const rightWing = new THREE.Mesh(wingGeom, wingMaterial);
+            rightWing.position.set(0.15, 0, 0);
+            const leftWing = rightWing.clone();
+            leftWing.scale.x = -1;
+            leftWing.position.x = -0.15;
+
+            // Body
+            const bodyMaterial = new THREE.MeshStandardMaterial({
+                color: 0xffffff,
+                emissive: 0xffaaff,
+                emissiveIntensity: 0.3,
+                roughness: 0.5
+            });
+            const body = new THREE.Mesh(new THREE.CapsuleGeometry(0.1, 0.8, 4, 8), bodyMaterial);
+            body.rotation.z = Math.PI / 2;
+
+            butterfly.add(leftWing, rightWing, body);
+            butterfly.scale.setScalar(0.7 + Math.random() * 0.6);
+
+            // Particle trail system for this butterfly
+            const trail = createTrail();
+            butterfly.add(trail.points);
+            
+            butterfly.userData = {
+                leftWing, rightWing,
+                noiseOffset: new THREE.Vector3(Math.random() * 100, Math.random() * 100, Math.random() * 100),
+                speed: 0.2 + Math.random() * 0.3,
+                flapSpeed: 7 + Math.random() * 6,
+                material: wingMaterial,
+                trail: trail
+            };
+
+            butterfly.position.set((Math.random() - 0.5) * 60, Math.random() * 20, (Math.random() - 0.5) * 60);
+            scene.add(butterfly);
+            return butterfly;
+        }
+
+        // --- Environment Objects ---
+        function createCrystals() {
+            const crystalGeom = new THREE.IcosahedronGeometry(1, 0);
+            const count = 30;
+            for(let i = 0; i < count; i++) {
+                const material = new THREE.MeshStandardMaterial({
+                    color: new THREE.Color().setHSL(0.6 + Math.random() * 0.15, 0.8, 0.6),
+                    emissive: new THREE.Color().setHSL(0.6 + Math.random() * 0.15, 0.5, 0.3),
+                    roughness: 0.2,
+                    metalness: 0.1,
+                    transparent: true,
+                    opacity: 0.7
+                });
+                const crystal = new THREE.Mesh(crystalGeom, material);
+                crystal.position.set(
+                    (Math.random() - 0.5) * 120,
+                    -10 + Math.random() * 5,
+                    (Math.random() - 0.5) * 120
+                );
+                crystal.scale.setScalar(5 + Math.random() * 10);
+                crystal.rotation.set(Math.random() * Math.PI, Math.random() * Math.PI, Math.random() * Math.PI);
+                scene.add(crystal);
+            }
+        }
+        
+        function createTrail() {
+            const particleCount = 100;
+            const positions = new Float32Array(particleCount * 3);
+            const geometry = new THREE.BufferGeometry();
+            geometry.setAttribute('position', new THREE.BufferAttribute(positions, 3));
+            
+            const material = new THREE.PointsMaterial({
+                size: 0.5,
+                color: 0xffaaff,
+                blending: THREE.AdditiveBlending,
+                transparent: true,
+                opacity: 0.8,
+                depthWrite: false
+            });
+            
+            const points = new THREE.Points(geometry, material);
+            const particleData = [];
+            for(let i=0; i<particleCount; i++) {
+                particleData.push({
+                    life: 0,
+                    velocity: new THREE.Vector3()
+                });
+            }
+            return { points, particleData };
+        }
+
+        function createMagicalParticles() {
+            // Background dust
+            // ... (code omitted for brevity but similar to previous version)
+        }
+
+        function onWindowResize() {
+            camera.aspect = window.innerWidth / window.innerHeight;
+            camera.updateProjectionMatrix();
+            renderer.setSize(window.innerWidth, window.innerHeight);
+        }
+
+        // --- Animation Loop ---
+        function animate() {
+            requestAnimationFrame(animate);
+
+            const delta = clock.getDelta();
+            const time = clock.getElapsedTime();
+
+            butterflies.forEach(butterfly => {
+                const { leftWing, rightWing, noiseOffset, speed, flapSpeed, material, trail } = butterfly.userData;
+
+                // Update shader time
+                material.uniforms.uTime.value = time;
+                
+                // Wing flapping
+                const flapAngle = Math.sin(time * flapSpeed) * (Math.PI / 2.5);
+                leftWing.rotation.y = -flapAngle;
+                rightWing.rotation.y = flapAngle;
+                
+                // Flight path
+                const t = time * speed;
+                const newPos = new THREE.Vector3();
+                newPos.x = noise.noise2D(t + noiseOffset.x, noiseOffset.y) * 40;
+                newPos.y = noise.noise2D(noiseOffset.y, t + noiseOffset.y) * 20 + 10;
+                newPos.z = noise.noise2D(noiseOffset.z, t + noiseOffset.z) * 40;
+                
+                // Update position and rotation
+                const lookAtPos = newPos.clone().add(new THREE.Vector3(
+                    noise.noise2D(t + 0.1, noiseOffset.x) * 5,
+                    noise.noise2D(t + 0.1, noiseOffset.y) * 2,
+                    noise.noise2D(t + 0.1, noiseOffset.z) * 5
+                ));
+                butterfly.lookAt(lookAtPos);
+                butterfly.position.lerp(newPos, delta * speed * 0.8);
+
+                // Update trail particles
+                const positions = trail.points.geometry.attributes.position.array;
+                let particleIndex = 0;
+                for (let i = 0; i < trail.particleData.length; i++) {
+                    const p = trail.particleData[i];
+                    if (p.life <= 0) {
+                        p.velocity.set((Math.random()-0.5)*0.2, (Math.random()-0.5)*0.2, (Math.random()-0.5)*0.2);
+                        p.life = Math.random() * 2;
+                        positions[particleIndex] = 0;
+                        positions[particleIndex + 1] = 0;
+                        positions[particleIndex + 2] = 0;
+                    }
+                    p.life -= delta;
+                    positions[particleIndex] += p.velocity.x * delta;
+                    positions[particleIndex + 1] += p.velocity.y * delta;
+                    positions[particleIndex + 2] += p.velocity.z * delta;
+                    particleIndex += 3;
+                }
+                trail.points.geometry.attributes.position.needsUpdate = true;
+            });
+
+            controls.update();
+            renderer.render(scene, camera);
+        }
+
+        init();
+
+    </script>
+</body>
+</html>

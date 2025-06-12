@@ -1,0 +1,120 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Background Music Player</title>
+    <!-- Tailwind CSS for styling -->
+    <script src="https://cdn.tailwindcss.com"></script>
+    <!-- Google Fonts: Inter -->
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;700&display=swap" rel="stylesheet">
+    <style>
+        /* Custom styles */
+        body {
+            font-family: 'Inter', sans-serif;
+        }
+        /* Style for the background image */
+        .bg-image {
+            background-image: url('https://placehold.co/1920x1080/1a202c/ffffff?text=Your+Background+Image');
+            background-size: cover;
+            background-position: center;
+            background-repeat: no-repeat;
+        }
+        /* Add a subtle overlay for better text readability */
+        .overlay {
+            background-color: rgba(0, 0, 0, 0.5);
+        }
+    </style>
+</head>
+<body class="bg-gray-900 text-white">
+
+    <!-- Audio element for the background music -->
+    <!-- A default audio source has been added. You can replace this with your own audio file. -->
+    <audio id="background-music" loop>
+        <source src="audio/oiiacat.mp3" type="audio/mp3">
+        Your browser does not support the audio element.
+    </audio>
+
+    <div class="relative min-h-screen flex flex-col items-center justify-center bg-image">
+        <!-- Dark overlay -->
+        <div class="absolute inset-0 overlay"></div>
+
+        <!-- Content container -->
+        <div class="relative z-10 text-center p-8">
+            <h1 class="text-4xl md:text-6xl font-bold mb-4">Music Player</h1>
+            <p class="text-lg md:text-xl text-gray-300 mb-8">Click the button below to control the background music.</p>
+
+            <!-- Play/Pause Button -->
+            <button id="play-pause-btn" class="bg-blue-600 hover:bg-blue-700 text-white font-bold py-4 px-8 rounded-full shadow-lg transition-transform transform hover:scale-105 focus:outline-none focus:ring-4 focus:ring-blue-500 focus:ring-opacity-50">
+                <!-- SVG Icon for Play -->
+                <svg id="play-icon" class="w-8 h-8" fill="currentColor" viewBox="0 0 20 20" xmlns="http://www.w3.org/2000/svg"><path fill-rule="evenodd" d="M10 18a8 8 0 100-16 8 8 0 000 16zM9.555 7.168A1 1 0 008 8v4a1 1 0 001.555.832l3-2a1 1 0 000-1.664l-3-2z" clip-rule="evenodd"></path></svg>
+                <!-- SVG Icon for Pause (hidden by default) -->
+                <svg id="pause-icon" class="w-8 h-8 hidden" fill="currentColor" viewBox="0 0 20 20" xmlns="http://www.w3.org/2000/svg"><path fill-rule="evenodd" d="M10 18a8 8 0 100-16 8 8 0 000 16zM8 7a1 1 0 00-1 1v4a1 1 0 102 0V8a1 1 0 00-1-1zm4 0a1 1 0 00-1 1v4a1 1 0 102 0V8a1 1 0 00-1-1z" clip-rule="evenodd"></path></svg>
+            </button>
+            
+            <!-- Error message for missing audio source -->
+            <p id="error-message" class="text-red-400 mt-4 hidden">Cannot play. Please provide a valid audio source.</p>
+        </div>
+    </div>
+
+    <script>
+        // --- DOM Element Selection ---
+        const audio = document.getElementById('background-music');
+        const playPauseBtn = document.getElementById('play-pause-btn');
+        const playIcon = document.getElementById('play-icon');
+        const pauseIcon = document.getElementById('pause-icon');
+        const errorMessage = document.getElementById('error-message');
+
+        // --- State Variable ---
+        let isPlaying = false;
+
+        // --- Event Listener ---
+        playPauseBtn.addEventListener('click', () => {
+            // Check if there is a valid audio source loaded. `currentSrc` is more reliable than `src`.
+            if (!audio.currentSrc) {
+                // If no valid music file is linked, show the error message.
+                console.warn("Audio source is not set or is invalid.");
+                errorMessage.classList.remove('hidden');
+                return;
+            }
+
+            // If the source is valid, make sure the error message is hidden
+            errorMessage.classList.add('hidden');
+            
+            // Toggle between play and pause based on the current state
+            if (isPlaying) {
+                audio.pause();
+            } else {
+                // The play() method returns a Promise, which may be rejected by the browser
+                // if the user hasn't interacted with the page yet.
+                const playPromise = audio.play();
+                if (playPromise !== undefined) {
+                    playPromise.catch(error => {
+                        console.error("Audio playback failed:", error);
+                        errorMessage.innerText = "Playback was blocked by the browser. Please interact with the page first.";
+                        errorMessage.classList.remove('hidden');
+                    });
+                }
+            }
+        });
+
+        // --- Audio Event Syncing ---
+        // When the audio starts playing, update the state and UI
+        audio.onplaying = function() {
+            isPlaying = true;
+            playIcon.classList.add('hidden');
+            pauseIcon.classList.remove('hidden');
+        };
+
+        // When the audio is paused, update the state and UI
+        audio.onpause = function() {
+            isPlaying = false;
+            playIcon.classList.remove('hidden');
+            pauseIcon.classList.add('hidden');
+        };
+    </script>
+
+</body>
+</html>
