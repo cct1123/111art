@@ -80,16 +80,19 @@
         <p>CLICK TO ENGAGE MAXIMUM OVERDRIVE</p>
     </div>
     <audio id="bg-music" loop>
-        <source src="audio/oiiacat.mp3" type="audio/mp3">
+        <!-- The source will be set by JavaScript -->
     </audio>
 
     <script type="module">
         import * as THREE from 'three';
         import { EffectComposer } from 'three/addons/postprocessing/EffectComposer.js';
+        // Corrected: Changed '=' to 'from' for RenderPass import
         import { RenderPass } from 'three/addons/postprocessing/RenderPass.js';
         import { UnrealBloomPass } from 'three/addons/postprocessing/UnrealBloomPass.js';
         import { FilmPass } from 'three/addons/postprocessing/FilmPass.js';
         import { ShaderPass } from 'three/addons/postprocessing/ShaderPass.js';
+        // Import OrbitControls
+        import { OrbitControls } from 'three/addons/controls/OrbitControls.js';
 
         // Shader for RGB shift effect
         const RGBShiftShader = {
@@ -147,11 +150,22 @@
                 
                 // Add fog and background color
                 this.scene.fog = new THREE.FogExp2(0x000000, 0.02); 
-                this.scene.background = new THREE.Color(0x000000);
+                this.scene.background = new THREE.Color(0x100000);
+
+                // Initialize OrbitControls
+                this.controls = new OrbitControls(this.camera, this.renderer.domElement);
+                this.controls.enableDamping = true; // Enable smooth camera movement
+                this.controls.dampingFactor = 0.05;
+                this.controls.screenSpacePanning = false; // Disable panning in screen space
+                this.controls.maxPolarAngle = Math.PI / 2; // Limit vertical rotation
+                // Disable zoom and pan
+                this.controls.enableZoom = false;
+                this.controls.enablePan = false;
+
 
                 // Set up post-processing for visual effects
                 const renderPass = new RenderPass(this.scene, this.camera);
-                const bloomPass = new UnrealBloomPass(new THREE.Vector2(window.innerWidth, window.innerHeight), 1.5, 0.6, 0.0);
+                const bloomPass = new UnrealBloomPass(new THREE.Vector2(window.innerWidth, window.innerHeight), 1.1, 0.8, 0.1);
                 const filmPass = new FilmPass(0.9, 0.9, 4096, false);
                 this.rgbShiftPass = new ShaderPass(RGBShiftShader);
 
@@ -161,14 +175,53 @@
                 this.composer.addPass(bloomPass);
                 this.composer.addPass(filmPass);
 
+                // List of MP3 files from the specified web directory.
+                // IMPORTANT: You will need to replace these with the actual full URLs of your MP3 files.
+                // This array assumes specific filenames exist at the given web URL.
+                const mp3Files = [
+                    "tori_segura_media/Abracadabra feat. OIIA Cat (Lady Gaga Edit).mp3", "tori_segura_media/Baby feat. OIIA Cat ｜ Full Version (Justin Bieber Edit).mp3", "tori_segura_media/Blinding Lights feat. OIIA Cat (The Weeknd Edit).mp3", "tori_segura_media/Blue (Da Ba Dee) feat. OIIA Cat.mp3", "tori_segura_media/CHIHIRO feat. OIIA Cat ｜ Full Version (Billie Eilish Edit).mp3", "tori_segura_media/Careless Whisper feat. OIIA Cat ｜ Full Version (George Michael Edit).mp3", "tori_segura_media/Chicken Jockey but it’s OIIA ｜ A Minecraft Movie Scene.mp3", "tori_segura_media/DARE feat. OIIA Cat (Gorillaz Edit).mp3", "tori_segura_media/Despacito feat. OIIA Cat ｜ Perfectly Looped Version.mp3", "tori_segura_media/Diamonds feat. OIIA Cat (Rihanna Edit).mp3", "tori_segura_media/Doja Cat ft. The Weeknd - You Right (Tori Segura Club Remix).mp3", "tori_segura_media/DtMF feat. OIIA Cat ｜ Bad Bunny Remix.mp3", "tori_segura_media/Give It To Me feat. OIIA Cat (Timbaland Edit).mp3", "tori_segura_media/Minecraft OIIA Cat Remix.mp3", "tori_segura_media/OIIA Cat BORN AGAIN  (LISA feat. Doja Cat & RAYE Edit).mp3", "tori_segura_media/OIIA Cat Ice Ice Baby (Vanilla Ice Remix).mp3", "tori_segura_media/OIIA Cat Pokémon Opening Theme Edit.mp3", "tori_segura_media/OIIA Cat feat. Spongebob - Stadium Rave.mp3", "tori_segura_media/OIIA Cat x A Sky Full Of Stars by Coldplay (Tori Segura Remix) [4k].mp3", "tori_segura_media/OIIA Cat x All The Stars (Kendrick Lamar & SZA Remix).mp3", "tori_segura_media/OIIA Cat x Anxiety (Doechii Remix).mp3", "tori_segura_media/OIIA Cat x Aquatic Ambience.mp3", "tori_segura_media/OIIA Cat x Baby One More Time (Britney Spears Remix).mp3", "tori_segura_media/OIIA Cat x Beat It (Michael Jackson Edit).mp3", "tori_segura_media/OIIA Cat x Beat It ｜ Making Of Timelapse.mp3", "tori_segura_media/OIIA Cat x Bohemian Rhapsody (Queen Remix).mp3", "tori_segura_media/OIIA Cat x CAN'T HOLD US (Macklemore Remix).mp3", "tori_segura_media/OIIA Cat x California Gurls (Katy Perry Remix).mp3", "tori_segura_media/OIIA Cat x Dancing Queen (ABBA Remix).mp3", "tori_segura_media/OIIA Cat x Darth Vader Theme (Star Wars Edit).mp3", "tori_segura_media/OIIA Cat x Die With A Smile (Bruno Mars & Lady Gaga Edit).mp3", "tori_segura_media/OIIA Cat x Eye Of The Tiger ｜ Star Appearance on The UIA Show ｜ Ep. 2.mp3", "tori_segura_media/OIIA Cat x FRIENDS by Marshmello & Anne-Marie (Tori Segura Remix).mp3", "tori_segura_media/OIIA Cat x Fly Me To The Moon.mp3", "tori_segura_media/OIIA Cat x Gangnam Style (PSY Remix).mp3", "tori_segura_media/OIIA Cat x Going Home by Miitori.mp3", "tori_segura_media/OIIA Cat x Havana (Camila Cabello Edit).mp3", "tori_segura_media/OIIA Cat x I like the way you kiss me ｜ Full Version.mp3", "tori_segura_media/OIIA Cat x Lost Woods (Legend of Zelda： Ocarina of Time Remix).mp3", "tori_segura_media/OIIA Cat x Never Gonna Give You Up by Rick Astley (Tori Segura Remix) [4k].mp3", "tori_segura_media/OIIA Cat x Not Like Us (Kendrick Lamar Remix).mp3", "tori_segura_media/OIIA Cat x Numb (Linkin Park Remix) [4k].mp3", "tori_segura_media/OIIA Cat x Oxy (SLAYTER x Cris MJ Edit).mp3", "tori_segura_media/OIIA Cat x Promiscuous x Motive FULL VERSION (Nelly Furtado & Ariana Grande Mashup).mp3", "tori_segura_media/OIIA Cat x Resonance Remix [4k].mp3", "tori_segura_media/OIIA Cat x See You Again (Tyler, the Creator Remix).mp3", "tori_segura_media/OIIA Cat x Smells Like Teen Spirit (Nirvana Remix).mp3", "tori_segura_media/OIIA Cat x Star Wars Main Theme [4K] ｜ May the UIA be with you.mp3", "tori_segura_media/OIIA Cat x Take On Me.mp3", "tori_segura_media/OIIA Cat x Tokyo - Nya ichi ni san.mp3", "tori_segura_media/OIIA Cat x Viva La Vida (Coldplay Remix).mp3", "tori_segura_media/OIIA Cat x Whatcha Say (The O.C. Scene).mp3", "tori_segura_media/Payphone feat. OIIA Cat (Maroon 5 Edit).mp3", "tori_segura_media/Sugar feat. OIIA Cat ｜ Full Version (Maroon 5 Edit).mp3", "tori_segura_media/The UIA Show ｜ First Contestant Gatito x Thank you ｜ Ep. 1.mp3", "tori_segura_media/Timber feat. OIIA Cat (Pitbull Edit).mp3", "tori_segura_media/UIA News ｜ Mysterious cat in OIIA music videos.mp3", "tori_segura_media/UIA News ｜ OIIA Cat Ethel Appearance on the UIA Show.mp3", "tori_segura_media/Wiwiwi Cat x Cupid by Fifty Fifty ｜ The UIA Show Ep. 3.mp3", 
+                ];
+
                 // Handle overlay click to start audio
                 const overlay = document.getElementById('overlay');
                 overlay.addEventListener('click', () => {
                     overlay.classList.add('hidden');
                     const audio = document.getElementById('bg-music');
+                    
+                    // Select a random MP3 file
+                    const randomIndex = Math.floor(Math.random() * mp3Files.length);
+                    audio.src = mp3Files[randomIndex];
+
                     audio.volume = 0.5;
                     audio.play().catch(e => console.error("Audio playback failed:", e));
                 }, { once: true });
+            }
+
+            // Moved createButterfly definition before createSceneContent
+            createButterfly(color) {
+                // Creates a single butterfly group with flapping wings
+                const group = new THREE.Group();
+                const wingGeo = new THREE.PlaneGeometry(5, 2.5); 
+                const wingMat = new THREE.MeshBasicMaterial({ color: color, side: THREE.DoubleSide, blending: THREE.AdditiveBlending, transparent: true, opacity: 0.8 });
+                
+                const leftWing = new THREE.Mesh(wingGeo, wingMat);
+                leftWing.position.x = -2.5;
+                leftWing.rotation.y = Math.PI / 4;
+                group.add(leftWing);
+
+                const rightWing = new THREE.Mesh(wingGeo, wingMat);
+                rightWing.position.x = 2.5;
+                rightWing.rotation.y = -Math.PI / 4;
+                group.add(rightWing);
+
+                group.userData = {
+                    leftWing, rightWing, wingMat,
+                    flapSpeed: Math.random() * 15 + 10, 
+                    velocity: new THREE.Vector3(),
+                    noiseOffset: Math.random() * 1000,
+                    colorOffset: Math.random() 
+                };
+                return group;
             }
 
             createSceneContent() {
@@ -230,32 +283,6 @@
                 }
             }
 
-            createButterfly(color) {
-                // Creates a single butterfly group with flapping wings
-                const group = new THREE.Group();
-                const wingGeo = new THREE.PlaneGeometry(5, 2.5); 
-                const wingMat = new THREE.MeshBasicMaterial({ color: color, side: THREE.DoubleSide, blending: THREE.AdditiveBlending, transparent: true, opacity: 0.8 });
-                
-                const leftWing = new THREE.Mesh(wingGeo, wingMat);
-                leftWing.position.x = -2.5;
-                leftWing.rotation.y = Math.PI / 4;
-                group.add(leftWing);
-
-                const rightWing = new THREE.Mesh(wingGeo, wingMat);
-                rightWing.position.x = 2.5;
-                rightWing.rotation.y = -Math.PI / 4;
-                group.add(rightWing);
-
-                group.userData = {
-                    leftWing, rightWing, wingMat,
-                    flapSpeed: Math.random() * 15 + 10, 
-                    velocity: new THREE.Vector3(),
-                    noiseOffset: Math.random() * 1000,
-                    colorOffset: Math.random() 
-                };
-                return group;
-            }
-
             updateScene(delta, elapsed) {
                 // --- MAXIMUM OVERDRIVE ANIMATIONS ---
                 // Cat spinning
@@ -279,11 +306,11 @@
                 this.mouth.scale.y = 0.5 + Math.abs(Math.sin(elapsed * 20)) * 2.5;
                 this.mouth.scale.x = 0.5 + Math.abs(Math.cos(elapsed * 18)) * 1.5;
 
-                // Camera shakes
-                this.camera.position.x = Math.sin(elapsed * 0.2) * 50 + (Math.random() - 0.5) * 4;
-                this.camera.position.z = Math.cos(elapsed * 0.2) * 50 + (Math.random() - 0.5) * 4;
-                this.camera.lookAt(this.scene.position);
-                this.camera.rotation.z += (Math.random() - 0.5) * 0.05;
+                // Camera shakes - REMOVED to allow OrbitControls
+                // this.camera.position.x = Math.sin(elapsed * 0.2) * 50 + (Math.random() - 0.5) * 4;
+                // this.camera.position.z = Math.cos(elapsed * 0.2) * 50 + (Math.random() - 0.5) * 4;
+                // this.camera.lookAt(this.scene.position);
+                // this.camera.rotation.z += (Math.random() - 0.5) * 0.05;
 
                 // Butterfly updates
                 for (const b of this.butterflies) {
@@ -329,6 +356,9 @@
                 requestAnimationFrame(this.animate.bind(this));
                 const delta = this.clock.getDelta();
                 const elapsed = this.clock.getElapsedTime();
+
+                // Update OrbitControls
+                this.controls.update(); 
 
                 this.updateScene(delta, elapsed);
                 this.composer.render();
