@@ -224,8 +224,11 @@
                     flapSpeed: Math.random() * 15 + 10, 
                     velocity: new THREE.Vector3(),
                     noiseOffset: Math.random() * 1000,
-                    colorOffset: Math.random() 
+                    colorOffset: Math.random(),
+                    // Added a property to track when to apply sudden drag
+                    dragCooldown: 0 
                 };
+
                 return group;
             }
 
@@ -338,6 +341,22 @@
                     ud.velocity.add(steer.multiplyScalar(delta * 4));
                     ud.velocity.clampLength(0, 0.8);
                     b.position.add(ud.velocity);
+
+                    // Apply sudden drag if a cooldown is not active and random chance is met
+                    if (ud.dragCooldown <= 0) {
+                        if (Math.random() < 0.005) { // 0.5% chance per frame to apply drag
+                            const suddenDrag = new THREE.Vector3(
+                                Math.sin(Math.random()*Math.PI)*10.0,
+                                Math.sin(Math.random()*Math.PI)*10.0,
+                                Math.sin(Math.random()*Math.PI)*10.0
+                            );
+                            ud.velocity.multiplyScalar(0.0); // erase velocity
+                            ud.velocity.add(suddenDrag); // sudden velocity
+                            ud.dragCooldown = 0.5 + Math.random() * 0.5; // Set cooldown for 0.5 to 1 second
+                        }
+                    } else {
+                        ud.dragCooldown -= delta;
+                    }
                 }
 
                 // --- WILD HALLUCINATION EFFECTS ---
