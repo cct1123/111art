@@ -1,0 +1,252 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Real-Time Audio Visualizer</title>
+    <style>
+        body, html {
+            margin: 0;
+            padding: 0;
+            width: 100%;
+            height: 100%;
+            overflow: hidden;
+            background-color: #0a0a0a;
+            font-family: 'Inter', sans-serif;
+            color: #e5e5e5;
+        }
+        canvas {
+            display: block;
+            position: absolute;
+            top: 0;
+            left: 0;
+            z-index: 1;
+        }
+        #audioPlayer {
+            display: none;
+        }
+        #start-overlay {
+            position: absolute;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            background-color: rgba(0,0,0,0.7);
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            font-size: 1.5rem;
+            z-index: 10;
+            cursor: pointer;
+            transition: opacity 0.5s ease;
+        }
+    </style>
+</head>
+<body>
+    <!-- Canvas for visualization -->
+    <canvas id="visualizerCanvas"></canvas>
+
+    <!-- Audio element -->
+    <audio id="audioPlayer" crossorigin="anonymous"></audio>
+    
+    <!-- Overlay for starting audio on user interaction -->
+    <div id="start-overlay">Click to start</div>
+
+    <script>
+        /**
+         * AudioVisualizer Class
+         * Encapsulates all logic for the real-time audio visualizer.
+         */
+        class AudioVisualizer {
+            constructor(canvasSelector) {
+                this.canvas = document.querySelector(canvasSelector);
+                if (!this.canvas) {
+                    console.error("Canvas element not found");
+                    return;
+                }
+                this.ctx = this.canvas.getContext('2d');
+                this.audioPlayer = document.getElementById('audioPlayer');
+                this.startOverlay = document.getElementById('start-overlay');
+
+                // --- Playlist ---
+                this.basePath = "https://111diamond.art/tori_segura_media/";
+                this.relativeFiles = [
+                    "Abracadabra feat. OIIA Cat (Lady Gaga Edit).mp3","Baby feat. OIIA Cat ｜ Full Version (Justin Bieber Edit).mp3","Blinding Lights feat. OIIA Cat (The Weeknd Edit).mp3","Blue (Da Ba Dee) feat. OIIA Cat.mp3","CHIHIRO feat. OIIA Cat ｜ Full Version (Billie Eilish Edit).mp3","Careless Whisper feat. OIIA Cat ｜ Full Version (George Michael Edit).mp3","Chicken Jockey but it’s OIIA ｜ A Minecraft Movie Scene.mp3","DARE feat. OIIA Cat (Gorillaz Edit).mp3","Despacito feat. OIIA Cat ｜ Perfectly Looped Version.mp3","Diamonds feat. OIIA Cat (Rihanna Edit).mp3","Doja Cat ft. The Weeknd - You Right (Tori Segura Club Remix).mp3","DtMF feat. OIIA Cat ｜ Bad Bunny Remix).mp3","Give It To Me feat. OIIA Cat (Timbaland Edit).mp3","Minecraft OIIA Cat Remix.mp3","OIIA Cat BORN AGAIN  (LISA feat. Doja Cat & RAYE Edit).mp3","OIIA Cat Ice Ice Baby (Vanilla Ice Remix).mp3","OIIA Cat Pokémon Opening Theme Edit).mp3","OIIA Cat feat. Spongebob - Stadium Rave.mp3","OIIA Cat x A Sky Full Of Stars by Coldplay (Tori Segura Remix) [4k].mp3","OIIA Cat x All The Stars (Kendrick Lamar & SZA Remix).mp3","OIIA Cat x Anxiety (Doechii Remix).mp3","OIIA Cat x Aquatic Ambience.mp3","OIIA Cat x Baby One More Time (Britney Spears Remix).mp3","OIIA Cat x Beat It (Michael Jackson Edit).mp3","OIIA Cat x Beat It ｜ Making Of Timelapse.mp3","OIIA Cat x Bohemian Rhapsody (Queen Remix).mp3","OIIA Cat x CAN'T HOLD US (Macklemore Remix).mp3","OIIA Cat x California Gurls (Katy Perry Remix).mp3","OIIA Cat x Dancing Queen (ABBA Remix).mp3","OIIA Cat x Darth Vader Theme (Star Wars Edit).mp3","OIIA Cat x Die With A Smile (Bruno Mars & Lady Gaga Edit).mp3","OIIA Cat x Eye Of The Tiger ｜ Star Appearance on The UIA Show ｜ Ep. 2.mp3","OIIA Cat x FRIENDS by Marshmello & Anne-Marie (Tori Segura Remix).mp3","OIIA Cat x Fly Me To The Moon.mp3","OIIA Cat x Gangnam Style (PSY Remix).mp3","OIIA Cat x Going Home by Miitori.mp3","OIIA Cat x Havana (Camila Cabello Edit).mp3","OIIA Cat x I like the way you kiss me ｜ Full Version.mp3","OIIA Cat x Lost Woods (Legend of Zelda： Ocarina of Time Remix).mp3","OIIA Cat x Never Gonna Give You Up by Rick Astley (Tori Segura Remix) [4k].mp3","OIIA Cat x Not Like Us (Kendrick Lamar Remix).mp3","OIIA Cat x Numb (Linkin Park Remix) [4k].mp3","OIIA Cat x Oxy (SLAYTER x Cris MJ Edit).mp3","OIIA Cat x Promiscuous x Motive FULL VERSION (Nelly Furtado & Ariana Grande Mashup).mp3","OIIA Cat x Resonance Remix [4k].mp3","OIIA Cat x See You Again (Tyler, the Creator Remix).mp3","OIIA Cat x Smells Like Teen Spirit (Nirvana Remix).mp3","OIIA Cat x Star Wars Main Theme [4K] ｜ May the UIA be with you.mp3","OIIA Cat x Take On Me.mp3","OIIA Cat x Tokyo - Nya ichi ni san.mp3","OIIA Cat x Viva La Vida (Coldplay Remix).mp3","OIIA Cat x Whatcha Say (The O.C. Scene).mp3","Payphone feat. OIIA Cat (Maroon 5 Edit).mp3","Sugar feat. OIIA Cat ｜ Full Version (Maroon 5 Edit).mp3","Timber feat. OIIA Cat (Pitbull Edit).mp3","UIA News ｜ Mysterious cat in OIIA music videos.mp3","UIA News ｜ OIIA Cat Ethel Appearance on the UIA Show.mp3","Wiwiwi Cat x Cupid by Fifty Fifty ｜ The UIA Show Ep. 3.mp3"
+                ];
+                this.mp3Files = this.relativeFiles.map(file => ({
+                    url: `${this.basePath}${encodeURIComponent(file).replace(/'/g, '%27')}`,
+                    name: file.replace('.mp3', '')
+                }));
+
+                // --- State Variables ---
+                this.isInitialized = false;
+                this.particles = [];
+                this.lastVolume = 0;
+                this.beatThreshold = 20;
+                this.lastBeatTime = 0;
+            }
+
+            /** Initializes the Web Audio API. Requires a user gesture. */
+            _initializeAudio() {
+                if (this.isInitialized) return;
+                this.audioContext = new (window.AudioContext || window.webkitAudioContext)();
+                this.analyser = this.audioContext.createAnalyser();
+                this.analyser.fftSize = 256;
+                this.source = this.audioContext.createMediaElementSource(this.audioPlayer);
+                this.source.connect(this.analyser);
+                this.analyser.connect(this.audioContext.destination);
+                const bufferLength = this.analyser.frequencyBinCount;
+                this.dataArray = new Uint8Array(bufferLength);
+                this.isInitialized = true;
+            }
+            
+            /** Sets up canvas dimensions and resize listener. */
+            _setupCanvas() {
+                this.canvas.width = window.innerWidth;
+                this.canvas.height = window.innerHeight;
+                window.addEventListener('resize', () => {
+                    this.canvas.width = window.innerWidth;
+                    this.canvas.height = window.innerHeight;
+                });
+            }
+
+            /** Loads a new random song and plays it. */
+            _loadRandomSong() {
+                const randomSong = this.mp3Files[Math.floor(Math.random() * this.mp3Files.length)];
+                this.audioPlayer.src = randomSong.url;
+                this.audioPlayer.play().catch(e => console.warn("Autoplay was prevented.", e));
+            }
+
+            /** Creates a burst of particles based on volume. */
+            _createParticleBurst(volume) {
+                 const centerX = this.canvas.width / 2;
+                 const centerY = this.canvas.height / 2;
+                 const hue = 270 + volume / 2; 
+                 for (let i = 0; i < 30; i++) {
+                     const angle = Math.random() * Math.PI * 2;
+                     const speed = (Math.random() * 5) + 2;
+                     const velocity = { x: Math.cos(angle) * speed, y: Math.sin(angle) * speed };
+                     const radius = Math.random() * 2 + 1;
+                     const color = `hsl(${hue}, 100%, 70%)`;
+                     this.particles.push(new Particle(centerX, centerY, radius, color, velocity, this.ctx));
+                 }
+            }
+
+            /** The main animation loop. */
+            _animate() {
+                requestAnimationFrame(this._animate.bind(this));
+                this.ctx.fillStyle = 'rgba(10, 10, 10, 0.2)';
+                this.ctx.fillRect(0, 0, this.canvas.width, this.canvas.height);
+
+                if (!this.isInitialized) return;
+
+                this.analyser.getByteFrequencyData(this.dataArray);
+                const averageVolume = this.dataArray.reduce((sum, value) => sum + value, 0) / this.dataArray.length;
+                
+                const centerX = this.canvas.width / 2;
+                const centerY = this.canvas.height / 2;
+
+                // --- Draw Pulsating Orb ---
+                const baseRadius = 50;
+                const dynamicRadius = baseRadius + (averageVolume * 1.5);
+                const hue = 270 + averageVolume / 2;
+                const saturation = 90;
+                const lightness = 50 + averageVolume / 10;
+                
+                this.ctx.beginPath();
+                this.ctx.arc(centerX, centerY, dynamicRadius + 20, 0, Math.PI * 2);
+                const glowGradient = this.ctx.createRadialGradient(centerX, centerY, dynamicRadius, centerX, centerY, dynamicRadius + 20);
+                glowGradient.addColorStop(0, `hsla(${hue}, ${saturation}%, ${lightness}%, 0.3)`);
+                glowGradient.addColorStop(1, `hsla(${hue}, ${saturation}%, ${lightness}%, 0)`);
+                this.ctx.fillStyle = glowGradient;
+                this.ctx.fill();
+                
+                this.ctx.beginPath();
+                this.ctx.arc(centerX, centerY, dynamicRadius, 0, Math.PI * 2);
+                const gradient = this.ctx.createRadialGradient(centerX, centerY, dynamicRadius * 0.5, centerX, centerY, dynamicRadius);
+                gradient.addColorStop(0, `hsl(${hue}, ${saturation}%, ${lightness + 15}%)`);
+                gradient.addColorStop(1, `hsl(${hue}, ${saturation}%, ${lightness}%)`);
+                this.ctx.fillStyle = gradient;
+                this.ctx.fill();
+
+                // --- Beat Detection & Particle Creation ---
+                const volumeChange = averageVolume - this.lastVolume;
+                const now = Date.now();
+                if (volumeChange > this.beatThreshold && (now - this.lastBeatTime > 100)) {
+                    this._createParticleBurst(averageVolume);
+                    this.lastBeatTime = now;
+                }
+                this.lastVolume = averageVolume;
+
+                // --- Update and Draw Particles ---
+                this.particles.forEach((particle, index) => {
+                    if (particle.alpha <= 0) {
+                        this.particles.splice(index, 1);
+                    } else {
+                        particle.update();
+                    }
+                });
+            }
+            
+            /** Sets up event listeners. */
+            _setupEventListeners() {
+                // Play next song when current one ends
+                this.audioPlayer.addEventListener('ended', this._loadRandomSong.bind(this));
+                
+                // Handle autoplay policy by requiring a single user click to start
+                const startHandler = () => {
+                    this._initializeAudio();
+                    this._loadRandomSong();
+                    this.startOverlay.style.opacity = '0';
+                    this.startOverlay.style.pointerEvents = 'none'; // So it doesn't block other events
+                    // Remove listener after first use
+                    window.removeEventListener('click', startHandler);
+                    window.removeEventListener('touchend', startHandler);
+                };
+                
+                window.addEventListener('click', startHandler);
+                window.addEventListener('touchend', startHandler);
+            }
+
+            /** Public method to start the visualizer. */
+            start() {
+                this._setupCanvas();
+                this._setupEventListeners();
+                this._animate();
+            }
+        }
+
+        /**
+         * Particle Class
+         * Represents a single particle in the visualizer.
+         */
+        class Particle {
+            constructor(x, y, radius, color, velocity, ctx) {
+                this.x = x; this.y = y; this.radius = radius;
+                this.color = color; this.velocity = velocity;
+                this.ctx = ctx;
+                this.alpha = 1; this.friction = 0.99;
+            }
+            draw() {
+                this.ctx.save(); this.ctx.globalAlpha = this.alpha;
+                this.ctx.beginPath(); this.ctx.arc(this.x, this.y, this.radius, 0, Math.PI * 2, false);
+                this.ctx.fillStyle = this.color; this.ctx.fill(); this.ctx.restore();
+            }
+            update() {
+                this.velocity.x *= this.friction;
+                this.velocity.y *= this.friction;
+                this.x += this.velocity.x;
+                this.y += this.velocity.y;
+                this.alpha -= 0.02;
+                this.draw();
+            }
+        }
+        
+        // --- Entry Point ---
+        window.onload = function() {
+            const visualizer = new AudioVisualizer('#visualizerCanvas');
+            visualizer.start();
+        };
+    </script>
+</body>
+</html>
